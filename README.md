@@ -10,6 +10,14 @@ A **self-hosted, comprehensive and scalable** FastAPI backend server framework f
 The system is powered with GPU resource management, concurrent and VRAM-aware GPU scheduling. It can be used together with **Open3DStudio, an open-source replicate of TripoStudio**.
 
 ## CHANGELOG
+#### Updates 06.13 (OpenNexus Character Studio / local GPU)
+* **Template VRM rig** — `rig_mode: template` on `POST /api/v1/auto-rigging/generate-rig` applies `assets/example_autorig/template.vrm` skeleton to AIGC meshes (Blender pipeline in `scripts/blender/`).
+* **Image → World Package** — `POST /api/v1/world-generation/image-to-world` produces splat environment + optional mesh props; download via `GET /jobs/{id}/download?asset=manifest`.
+* **Image → Gaussian Splat** — `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) for Spark.js preview in Character Studio.
+* **Local DGX deployment** — Redis + scheduler + API scripts (`scripts/start_services_detached.sh`, `scripts/env_local_gpu.sh`). See **[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)**.
+* **Commercial model audit** — `docs/MODEL_LICENSES.md`; non-commercial routes disabled by default in `config/models.yaml`.
+* **Docs** — [AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md), [API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md), updated [api_documentation.md](docs/api_documentation.md).
+
 #### Updates 02.05 
 * Add support for [Runpod](https://console.runpod.io/deploy?template=bb0j8jta3y&ref=djra5vej), it takes only a single click to deploy this backend by yourself! Check the [RunPod Section](https://github.com/FishWoWater/3DAIGC-API/tree/main?tab=readme-ov-file#docker-recommendedj) for more details.
 
@@ -67,7 +75,12 @@ The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
 ### Image to Gaussian Splat
 | Model | Input | Output | VRAM | Features |
 |-------|-------|--------|------|----------|
-| **[TripoSplat](https://github.com/VAST-AI-Research/TripoSplat)** | Image | `.ply` / splat | TBD | Spark.js preview in Character Studio |
+| **[TripoSplat](https://github.com/VAST-AI-Research/TripoSplat)** | Image | `.ply` / splat | ~16GB | Spark.js preview in Character Studio |
+
+### Image to World Package
+| Model | Input | Output | VRAM | Features |
+|-------|-------|--------|------|----------|
+| **opennexus_image_to_world** | Image | World manifest + splat + optional props | ~20GB | TripoSplat environment + optional TRELLIS.2 mesh props; Galaxy XR / IWSDK |
 
 ### Mesh Segmentation 
 | Model | Input | Output | VRAM | Features |
@@ -174,11 +187,28 @@ chmod +x download_models.sh
 ```
 
 #### Running the Server
-```bash 
-chmod a+x ./scripts/run_multiwork.sh
-./scripts/run_multiworker.sh
+
+**Docker (simplest):** start Redis first, then the stack:
+
+```bash
+docker compose up -d
 ```
 
+**Local GPU (DGX / bare metal):**
+
+```bash
+# 1) Redis job queue (required)
+docker start 3daigc-redis   # or: docker compose up -d redis
+
+# 2) API + scheduler in background
+cd /path/to/3DAIGC-API
+bash scripts/start_services_detached.sh
+
+# Foreground (logs in terminal)
+bash scripts/run_server.sh
+```
+
+See **[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)** for venv setup, model downloads, and troubleshooting.
 
 The server will be available at `http://localhost:7842` by default.
 Once the server is running, visit:
@@ -354,6 +384,65 @@ curl -X POST "http://localhost:7842/api/v1/auto-rigging/generate-rig" \
 curl "http://localhost:7842/api/v1/system/jobs/{job_id}/download" \
   -o "rigged_character.fbx"
 ```
+
+**Template VRM rig** (OpenNexus avatar pipeline — bones-only on AIGC mesh):
+
+```bash
+curl -X POST "http://localhost:7842/api/v1/auto-rigging/generate-rig" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mesh_file_id": "char_xyz789",
+    "rig_mode": "template",
+    "humanoid_template_id": "template",
+    "output_format": "glb",
+    "model_preference": "unirig_auto_rig"
+  }'
+```
+
+See [docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md) and [docs/API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md).
+</details>
+
+### Image to World Package
+
+<details>
+<summary> Image to World Example </summary>
+
+```bash
+# 1. Upload image
+curl -X POST "http://localhost:7842/api/v1/file-upload/image" \
+  -F "file=@/path/to/scene.jpg"
+
+# 2. Generate world package (splat environment + optional props)
+curl -X POST "http://localhost:7842/api/v1/world-generation/image-to-world" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_file_id": "<file_id>",
+    "model_preference": "opennexus_image_to_world"
+  }'
+
+# 3. Poll job, then fetch manifest (Character Studio loads this URL)
+curl "http://localhost:7842/api/v1/system/jobs/{job_id}/download?asset=manifest"
+
+# 4. World assets under /api/v1/system/jobs/{job_id}/world/...
+```
+
+</details>
+
+### Image to Gaussian Splat
+
+<details>
+<summary> Image to Splat Example </summary>
+
+```bash
+curl -X POST "http://localhost:7842/api/v1/splat-generation/image-to-splat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_file_id": "<file_id>",
+    "model_preference": "triposplat_image_to_splat",
+    "output_format": "ply"
+  }'
+```
+
 </details>
 
 ### Mesh Retopology
@@ -564,7 +653,18 @@ curl "http://localhost:7842/api/v1/system/jobs/{job_id}/download" \
 ```
 </details>
 <br>
-For more examples, check out [API doc](./docs/api_documentation.md). Notice that the uploaded file may have a expired time.
+For more examples, check out [API doc](./docs/api_documentation.md) and the [docs index](./docs/README.md). Notice that uploaded files may expire after a configured TTL.
+
+### Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [docs/api_documentation.md](docs/api_documentation.md) | Full REST API reference |
+| [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md) | Redis, venv, start/stop on DGX or bare metal |
+| [docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md) | Photo → mesh → template rig → VRM export |
+| [docs/API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md) | Rig validation contract for skinned GLB |
+| [docs/MODEL_LICENSES.md](docs/MODEL_LICENSES.md) | Commercial-use model audit |
+| [docs/user_management.md](docs/user_management.md) | Optional auth and job isolation |
 
 ### Testing
 Directly test the adapters (no need to start up the server)

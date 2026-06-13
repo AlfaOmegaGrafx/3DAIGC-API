@@ -20,6 +20,8 @@ Legacy alias: template id `sifr2` → same files.
 | `POST /api/v1/auto-rigging/generate-rig` | Auto-rig; use `rig_mode: "template"`, `humanoid_template_id: "template"` |
 | `GET /api/v1/auto-rigging/humanoid-templates/{id}/manifest` | Template metadata for frontend VRM export |
 | `POST /api/v1/splat-generation/image-to-splat` | TripoSplat → `.ply` / `.splat` (Spark.js preview) |
+| `POST /api/v1/world-generation/image-to-world` | World package: splat environment + optional mesh props |
+| `GET /api/v1/system/jobs/{id}/download?asset=manifest` | World manifest after `image_to_world` job completes |
 
 ### Template rig request
 
@@ -45,7 +47,7 @@ Legacy alias: template id `sifr2` → same files.
 
 **Prior bug (2026-06):** alignment used glTF Y as “up” inside Blender. Blender imports glTF as **Z-up**, so height/feet/yaw were applied on the wrong axes → inverted skeleton and mesh in the viewport.
 
-See [API avatar rig contract](../../OpenNexus3DStudio/CharacterStudio/docs/API_AVATAR_RIG_CONTRACT.md) for export validation (`[API-Contract]` gate).
+See [API avatar rig contract](API_AVATAR_RIG_CONTRACT.md) for export validation (`[API-Contract]` gate).
 
 
 ## Blend shapes & Arc2Avatar

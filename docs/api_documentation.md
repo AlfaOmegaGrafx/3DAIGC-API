@@ -873,7 +873,7 @@ curl -X GET "http://localhost:7842/api/v1/system/jobs/{job_id}" \
 
 ## Auto Rigging Endpoints
 
-Skinned humanoid GLB exports must satisfy the [API avatar rig contract](../../OpenNexus3DStudio/CharacterStudio/docs/API_AVATAR_RIG_CONTRACT.md) (`rig_info.validation` on template rig jobs).
+Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVATAR_RIG_CONTRACT.md) (`rig_info.validation` on template rig jobs).
 
 ### Generate Rig
 - **URL**: `/api/v1/auto-rigging/generate-rig`
@@ -993,6 +993,52 @@ Gaussian splat preview (TripoSplat). Consumed by Character Studio via Spark.js.
 ```
 
 See also [AVATAR_PIPELINE.md](AVATAR_PIPELINE.md) for combining splats with avatar-from-image in the client.
+
+---
+
+## World Generation Endpoints
+
+Explorable world packages for Character Studio / Galaxy XR: Gaussian splat environment plus optional mesh props.
+
+### Image to World
+- **URL**: `/api/v1/world-generation/image-to-world`
+- **Method**: `POST`
+- **Description**: Generate a World Package from a single image (TripoSplat environment + optional TRELLIS.2 props)
+- **Authentication**: Required if user_auth_enabled is true
+- **Request Body**:
+```json
+{
+  "image_file_id": "<uploaded image>",
+  "model_preference": "opennexus_image_to_world",
+  "world_name": "My Scene",
+  "prop_regions": [],
+  "prop_mesh_model_preference": "trellis2_image_to_textured_mesh"
+}
+```
+- **Response**:
+```json
+{
+  "job_id": "uuid",
+  "status": "queued",
+  "message": "World generation job queued successfully"
+}
+```
+
+### Download World Manifest
+After job `status` is `completed`:
+
+- **URL**: `/api/v1/system/jobs/{job_id}/download?asset=manifest`
+- **Method**: `GET`
+- **Description**: Returns `world.manifest.json` listing splat environment and prop asset URLs
+
+### Download World Assets
+- **URL**: `/api/v1/system/jobs/{job_id}/world/{relative_path}`
+- **Method**: `GET`
+- **Description**: Serve files from the completed world package (e.g. `world/environment.ply`, prop GLBs)
+
+Character Studio loads the manifest URL first, then resolves relative paths against `world_base_url` from the job result.
+
+See [LOCAL_DEPLOYMENT.md](LOCAL_DEPLOYMENT.md) for Redis/API setup and [AVATAR_PIPELINE.md](AVATAR_PIPELINE.md) for the full client workflow.
 
 ---
 

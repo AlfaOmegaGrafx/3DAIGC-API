@@ -438,3 +438,28 @@ test_outputs/
 # some wheels are too large to put there 
 assets/wheels/flash_attn*
 assets/wheels/torch*
+
+# Local Python environment (never commit)
+venv/
+.venv/
+env/
+.Python
+
+# Environment files and secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials.json
+**/nvsync.key
+**/nvsync.key.pub
+
+# Runtime PID/state (never commit)
+run/
+restart_last_pid.txt
+*.pid
+
+# User uploads (local job inputs; never commit)
+uploads/
