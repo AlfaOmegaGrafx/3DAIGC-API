@@ -55,6 +55,13 @@ class Trellis2Runner:
                 os.getcwd(), "pretrained", "TRELLIS.2"
             )
         self.model_cache_dir = Path(model_cache_dir)
+
+        # Prefer locally cached official microsoft/TRELLIS.2-4B weights; fall back to HF.
+        _local_pipeline = self.model_cache_dir / "TRELLIS.2-4B"
+        if (_local_pipeline / "pipeline.json").exists():
+            self.pipeline_source = str(_local_pipeline)
+        else:
+            self.pipeline_source = "microsoft/TRELLIS.2-4B"
         
         # Add TRELLIS.2 to Python path
         if str(self.trellis2_root) not in sys.path:
@@ -87,7 +94,7 @@ class Trellis2Runner:
             from trellis2.pipelines import Trellis2ImageTo3DPipeline
             
             self.image_to_3d_pipeline = Trellis2ImageTo3DPipeline.from_pretrained(
-                "microsoft/TRELLIS.2-4B"
+                self.pipeline_source
             )
             
             if self.device == "cuda":
@@ -109,7 +116,7 @@ class Trellis2Runner:
             from trellis2.pipelines import Trellis2TexturingPipeline
             
             self.texturing_pipeline = Trellis2TexturingPipeline.from_pretrained(
-                "microsoft/TRELLIS.2-4B",
+                self.pipeline_source,
                 config_file="texturing_pipeline.json"
             )
             

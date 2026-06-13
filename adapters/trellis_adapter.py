@@ -78,6 +78,8 @@ class TrellisTextToMeshAdapterCommon(TextToMeshModel):
     def _load_model(self):
         """Load the TRELLIS model pipeline."""
         try:
+            os.environ.setdefault("XFORMERS_DISABLED", "1")
+            os.environ.setdefault("ATTN_BACKEND", "sdpa")
             logger.info(f"Loading TRELLIS model from {self.trellis_root}")
 
             # Import TRELLIS modules
@@ -366,6 +368,8 @@ class TrellisImageToMeshAdapterCommon(ImageToMeshModel):
     def _load_model(self):
         """Load the TRELLIS model pipeline."""
         try:
+            os.environ.setdefault("XFORMERS_DISABLED", "1")
+            os.environ.setdefault("ATTN_BACKEND", "sdpa")
             logger.info(f"Loading TRELLIS model from {self.trellis_root}")
 
             # Import TRELLIS modules
@@ -458,7 +462,6 @@ class TrellisImageToMeshAdapterCommon(ImageToMeshModel):
                 ])
                 input_mesh.apply_transform(transform)
                 logger.info(f"Loaded input mesh from {mesh_path} and converted from z-up to y-up")
-                # do the voxelization
                 outputs = self.pipeline.run_detail_variation(
                     input_mesh,
                     Image.open(image_path),
@@ -654,6 +657,11 @@ class TrellisTextMeshPaintingAdapter(TrellisTextToMeshAdapterCommon):
             "slat_decoder_mesh",
         ]
 
+    def _load_model(self):
+        os.environ.setdefault("XFORMERS_DISABLED", "1")
+        os.environ.setdefault("ATTN_BACKEND", "sdpa")
+        return super()._load_model()
+
     def _process_request(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process text-conditioned mesh generation using TRELLIS.
@@ -701,6 +709,11 @@ class TrellisImageMeshPaintingAdapter(TrellisImageToMeshAdapterCommon):
             "sparse_structure_flow_model",
             "slat_decoder_mesh",
         ]
+
+    def _load_model(self):
+        os.environ.setdefault("XFORMERS_DISABLED", "1")
+        os.environ.setdefault("ATTN_BACKEND", "sdpa")
+        return super()._load_model()
 
     def _process_request(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """

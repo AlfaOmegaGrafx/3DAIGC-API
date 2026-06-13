@@ -59,3 +59,7 @@ peft==0.17.1
 # extra 
 pyvista 
 vtk
+
+# Model adapters + TRELLIS helpers (plyfile, kiui, xformers, rembg, …): optional second step
+#   ./venv/bin/pip install -r requirements-models-extra.txt
+# or: ./scripts/bootstrap_local_models.sh

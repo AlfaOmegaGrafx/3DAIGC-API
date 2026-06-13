@@ -150,7 +150,7 @@ All API responses follow a consistent format:
     "text_to_raw_mesh": ["trellis_text_to_raw_mesh"],
     "image_to_raw_mesh": ["trellis_image_to_raw_mesh"],
     "mesh_segmentation": ["partfield_mesh_segmentation"],
-    "auto_rig": ["unirig_auto_rig"]
+    "auto_rig": ["unirig_auto_rig", "skintokens_auto_rig"]
   },
   "total_features": 4,
   "total_models": 4
@@ -873,6 +873,8 @@ curl -X GET "http://localhost:7842/api/v1/system/jobs/{job_id}" \
 
 ## Auto Rigging Endpoints
 
+Skinned humanoid GLB exports must satisfy the [API avatar rig contract](../../OpenNexus3DStudio/CharacterStudio/docs/API_AVATAR_RIG_CONTRACT.md) (`rig_info.validation` on template rig jobs).
+
 ### Generate Rig
 - **URL**: `/api/v1/auto-rigging/generate-rig`
 - **Method**: `POST`
@@ -892,9 +894,37 @@ curl -X GET "http://localhost:7842/api/v1/system/jobs/{job_id}" \
   - `mesh_path`: Local file path (for server-side files)
   - `mesh_file_id`: File ID from upload endpoint (**recommended**)
 - **Parameters**:
-  - `rig_mode`: Rig mode (`skeleton`, `skin`, or `full`)
-  - `output_format`: Output format
-  - `model_preference`: Model to use for rigging
+  - `rig_mode`: Rig mode (`skeleton`, `skin`, `full`, or **`template`** for humanoid template VRM)
+  - `humanoid_template_id`: When `rig_mode` is `template`, template id (default **`template`**; legacy alias `sifr2`)
+  - `output_format`: Output format (`glb` recommended for template mode)
+  - `model_preference`: Model to use for rigging (`unirig_auto_rig`)
+
+**Template rig example** (bones-only; facial morphs require mesh wrap — see [AVATAR_PIPELINE.md](AVATAR_PIPELINE.md)):
+
+```json
+{
+  "mesh_file_id": "<uploaded glb>",
+  "rig_mode": "template",
+  "humanoid_template_id": "template",
+  "output_format": "glb",
+  "model_preference": "unirig_auto_rig"
+}
+```
+
+### Humanoid Template Manifest
+- **URL**: `/api/v1/auto-rigging/humanoid-templates/{template_id}/manifest`
+- **Method**: `GET`
+- **Description**: Metadata for `template.vrm` (bone counts, blend-shape preset names) used by Character Studio VRM export
+- **Authentication**: None required
+- **Response** (abbreviated):
+```json
+{
+  "template_id": "template",
+  "description": "OpenNexus humanoid template VRM",
+  "expected": { "blend_shape_groups": 124, "human_bones": 55 }
+}
+```
+
 - **Response**:
 ```json
 {
@@ -933,6 +963,36 @@ curl -X GET "http://localhost:7842/api/v1/system/jobs/{job_id}" \
   "output_formats": ["fbx", "glb"]
 }
 ```
+
+---
+
+## Splat Generation Endpoints
+
+Gaussian splat preview (TripoSplat). Consumed by Character Studio via Spark.js.
+
+### Image to Splat
+- **URL**: `/api/v1/splat-generation/image-to-splat`
+- **Method**: `POST`
+- **Description**: Generate a 3D Gaussian splat from a single image
+- **Authentication**: Required if user_auth_enabled is true
+- **Request Body**:
+```json
+{
+  "image_file_id": "<uploaded image>",
+  "model_preference": "triposplat_image_to_splat",
+  "output_format": "ply"
+}
+```
+- **Response**:
+```json
+{
+  "job_id": "job_123456",
+  "status": "queued",
+  "message": "Splat generation job queued successfully"
+}
+```
+
+See also [AVATAR_PIPELINE.md](AVATAR_PIPELINE.md) for combining splats with avatar-from-image in the client.
 
 ---
 
@@ -1672,6 +1732,7 @@ curl "http://localhost:7842/api/v1/system/jobs/history?start_date=2024-01-01T00:
 | Image Mesh Painting | `trellis_image_mesh_painting` | TRELLIS model for mesh painting |
 | Mesh Segmentation | `partfield_mesh_segmentation` | PartField model for segmentation |
 | Auto Rigging | `unirig_auto_rig` | UniRig model for auto-rigging |
+| Auto Rigging | `skintokens_auto_rig` | SkinTokens / TokenRig autoregressive rigging model (skeleton + skinning) |
 
 ---
 

@@ -177,12 +177,13 @@ class VoxHammerInferenceHelper:
         Returns:
             Dictionary containing pipeline results
         """
+        render_dir = None
         try:
-            from thirdparty.VoxHammer.inference import (
+            from utils.voxhammer_blender_runner import (
                 run_3d_rendering,
+                run_3d_editing,
                 run_feature_extraction,
                 run_voxel_masking,
-                run_3d_editing,
             )
             
             # Create temporary render directory

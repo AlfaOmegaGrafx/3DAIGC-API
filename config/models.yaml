@@ -1,6 +1,10 @@
 # Models Configuration
 # Available models for each feature
 # Use the actual adapter model IDs as defined in the adapter classes
+#
+# COMMERCIAL USE (hard prerequisite for Open3DStudio):
+#   See docs/MODEL_LICENSES.md before enabling any route.
+#   Routes disabled below are NON-COMMERCIAL upstream licenses (NVIDIA / S-Lab / Bria).
 
 # text-conditioned geometry/geometry+texture generation
 text_to_textured_mesh:
@@ -28,7 +32,7 @@ image_to_raw_mesh:
     vram_requirement: 8192  # MB
     supported_inputs: ["image"]
     supported_outputs: ["glb", "obj"]
-    model_path: "thirdparty/Hunyuan3D-2.1"
+    model_path: "pretrained/tencent/Hunyuan3D-2.1"
     enabled: true
     max_workers: 1
     
@@ -37,7 +41,7 @@ image_to_raw_mesh:
     supported_inputs: ["image"]
     supported_outputs: ["glb", "obj"]
     model_path: "thirdparty/PartPacker"
-    enabled: true
+    enabled: false  # LICENSE: NVIDIA non-commercial research only — see docs/MODEL_LICENSES.md
     max_workers: 1
   
   ultrashape_image_to_raw_mesh:
@@ -70,7 +74,7 @@ image_to_textured_mesh:
     vram_requirement: 19456  # MB
     supported_inputs: ["image"]
     supported_outputs: ["glb", "obj"]
-    model_path: "thirdparty/Hunyuan3D-2.1"
+    model_path: "pretrained/tencent/Hunyuan3D-2.1"
     enabled: true
     max_workers: 1
 
@@ -96,7 +100,27 @@ image_mesh_painting:
     vram_requirement: 12288  # MB
     supported_inputs: ["mesh", "text", "image"]
     supported_outputs: ["glb", "obj"]
-    model_path: "thirdparty/Hunyuan3D-2"
+    model_path: "pretrained/tencent/Hunyuan3D-2.1"
+    enabled: true
+    max_workers: 1
+
+# image → explorable world package (splat environment + optional mesh props)
+image_to_world:
+  opennexus_image_to_world:
+    vram_requirement: 20480  # MB (TripoSplat + optional TRELLIS.2 props sequential)
+    supported_inputs: ["image"]
+    supported_outputs: ["json", "ply", "glb"]
+    model_path: "outputs/worlds"
+    enabled: true
+    max_workers: 1
+
+# image-conditioned Gaussian splat generation (Spark.js / WebXR)
+image_to_splat:
+  triposplat_image_to_splat:
+    vram_requirement: 16384  # MB
+    supported_inputs: ["image"]
+    supported_outputs: ["ply", "splat"]
+    model_path: "thirdparty/TripoSplat"
     enabled: true
     max_workers: 1
 
@@ -107,14 +131,14 @@ mesh_segmentation:
     supported_inputs: ["glb", "obj"]
     supported_outputs: ["glb"]
     model_path: "thirdparty/PartField"
-    enabled: true
+    enabled: false  # LICENSE: NVIDIA non-commercial only — see docs/MODEL_LICENSES.md
     max_workers: 1
   
   p3sam_mesh_segmentation:
     vram_requirement: 61440  # MB (60GB, P3-SAM)
     supported_inputs: ["glb", "obj", "ply"]
     supported_outputs: ["glb"]
-    model_path: "pretrained/P3-SAM/last.ckpt"
+    model_path: "pretrained/P3-SAM/p3sam.safetensors"
     enabled: true
     max_workers: 1
 
@@ -127,6 +151,16 @@ auto_rig:
     enabled: true
     max_workers: 1
 
+  skintokens_auto_rig:
+    vram_requirement: 15360  # MB (>=14GB recommended by upstream)
+    supported_inputs: ["obj", "glb", "gltf", "ply", "stl", "fbx"]
+    supported_outputs: ["glb"]
+    model_path: "thirdparty/SkinTokens"
+    enabled: true
+    max_workers: 1
+    init_params:
+      auto_download_checkpoints: true
+
 # mesh retopology
 mesh_retopology:
   fastmesh_v1k_retopology:
@@ -134,7 +168,7 @@ mesh_retopology:
     supported_inputs: ["obj", "glb", "ply", "stl"]
     supported_outputs: ["obj", "glb", "ply"]
     model_path: "pretrained/FastMesh-V1K"
-    enabled: true
+    enabled: false  # LICENSE: S-Lab / FastMesh non-commercial only — see docs/MODEL_LICENSES.md
     max_workers: 1
     
   fastmesh_v4k_retopology:
@@ -142,6 +176,14 @@ mesh_retopology:
     supported_inputs: ["obj", "glb", "ply", "stl"]
     supported_outputs: ["obj", "glb", "ply"]
     model_path: "pretrained/FastMesh-V4K"
+    enabled: false  # LICENSE: S-Lab / FastMesh non-commercial only — see docs/MODEL_LICENSES.md
+    max_workers: 1
+
+  instant_meshes_retopology:
+    vram_requirement: 512  # MB (CPU CLI; no GPU weights)
+    supported_inputs: ["obj", "glb", "ply", "stl"]
+    supported_outputs: ["obj", "glb", "ply"]
+    model_path: "thirdparty/instant-meshes/build/Instant Meshes"
     enabled: true
     max_workers: 1
 
@@ -152,6 +194,14 @@ uv_unwrapping:
     supported_inputs: ["obj", "glb"]
     supported_outputs: ["obj"]
     model_path: "pretrained/PartField/model_objaverse.ckpt"
+    enabled: false  # LICENSE: uses PartField weights (NVIDIA non-commercial) — see docs/MODEL_LICENSES.md
+    max_workers: 1
+
+  xatlas_uv_unwrapping:
+    vram_requirement: 512  # MB (CPU; pip package xatlas)
+    supported_inputs: ["obj", "glb", "ply", "stl"]
+    supported_outputs: ["obj", "glb"]
+    model_path: "pip:xatlas"
     enabled: true
     max_workers: 1
 

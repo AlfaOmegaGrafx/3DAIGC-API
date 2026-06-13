@@ -44,12 +44,14 @@ DEPLOYMENT NOTE:
 import asyncio
 import logging
 import multiprocessing as mp
+import os
 import queue
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
@@ -110,6 +112,7 @@ def model_worker_process(
     response_queue: mp.Queue,
     control_queue: mp.Queue,
     control_response_queue: mp.Queue,
+    ready_queue: Optional[mp.Queue] = None,
 ):
     """
     Main worker process function that handles model loading and job processing.
@@ -122,12 +125,20 @@ def model_worker_process(
     try:
         # Set up process environment
         logger.info(f"Starting worker process {worker_id} on GPU {gpu_id}")
-        # At the very beginning we try to login huggingface for the download of some special models
-        import os
-        from huggingface_hub import InferenceClient, login
+        from core.utils.gpu_env import apply_local_gpu_env
 
-        hf_token = os.getenv("HUGGINGFACE_TOKEN", None)
-        if hf_token is not None:
+        apply_local_gpu_env()
+        os.environ.setdefault("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
+        # At the very beginning we try to login huggingface for the download of some special models
+        from huggingface_hub import get_token, login
+
+        hf_token = (
+            os.getenv("HUGGINGFACE_TOKEN")
+            or os.getenv("HF_TOKEN")
+            or os.getenv("HUGGING_FACE_HUB_TOKEN")
+            or get_token()
+        )
+        if hf_token:
             try:
                 login(token=hf_token, add_to_git_credential=False)
                 logger.info("Login to huggingface successfully.")
@@ -158,11 +169,22 @@ def model_worker_process(
             if success:
                 loaded_model = model
                 logger.info(f"Worker {worker_id} successfully loaded model {model_id}")
+                if ready_queue is not None:
+                    ready_queue.put({"success": True})
             else:
                 logger.error(f"Worker {worker_id} failed to load model {model_id}")
+                if ready_queue is not None:
+                    ready_queue.put(
+                        {
+                            "success": False,
+                            "error": f"Failed to load model {model_id}",
+                        }
+                    )
                 return  # Exit worker if model loading fails
         except Exception as e:
             logger.error(f"Worker {worker_id} failed to load model {model_id}: {e}")
+            if ready_queue is not None:
+                ready_queue.put({"success": False, "error": str(e)})
             return  # Exit worker if model loading fails
 
         # Main worker loop
@@ -373,7 +395,9 @@ def _process_job_in_worker(
         processing_job = job_id
 
         # Process job
-        result = loaded_model._process_request(job_request.inputs)
+        process_inputs = dict(job_request.inputs)
+        process_inputs.setdefault("job_id", job_request.job_id)
+        result = loaded_model._process_request(process_inputs)
 
         return (
             {
@@ -483,6 +507,7 @@ class MultiprocessModelScheduler:
 
         # Job processing task
         self.job_processing_task: Optional[asyncio.Task] = None
+        self._last_worker_load_error: Optional[str] = None
 
         # Mark as initialized
         self._initialized = True
@@ -611,6 +636,40 @@ class MultiprocessModelScheduler:
 
         self.running = False
         logger.info("Stopping multiprocess model scheduler")
+
+        # Allow long GPU jobs (e.g. Hunyuan textured mesh) to finish before teardown.
+        drain_timeout = float(os.environ.get("P3D_SHUTDOWN_DRAIN_SEC", "7200"))
+        poll_interval = float(os.environ.get("P3D_SHUTDOWN_POLL_SEC", "5"))
+        if drain_timeout > 0:
+            deadline = time.time() + drain_timeout
+            while time.time() < deadline:
+                try:
+                    queue_status = await self.job_queue.get_queue_status()
+                    processing = int(queue_status.get("processing", 0) or 0)
+                except Exception:
+                    processing = 0
+                if processing <= 0:
+                    break
+                logger.info(
+                    f"Scheduler shutdown: waiting for {processing} in-flight job(s) "
+                    f"(up to {int(deadline - time.time())}s remaining)"
+                )
+                await asyncio.sleep(poll_interval)
+
+        # Fail jobs still marked as processing so clients do not poll forever.
+        fail_processing = getattr(self.job_queue, "fail_processing_jobs", None)
+        if callable(fail_processing):
+            try:
+                failed_count = await fail_processing(
+                    "Scheduler shut down while the job was still running. "
+                    "Please retry after the API service is back online."
+                )
+                if failed_count:
+                    logger.warning(
+                        f"Marked {failed_count} in-flight job(s) as failed during shutdown"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to mark in-flight jobs as failed during shutdown: {e}")
 
         # Stop job processing task
         if self.job_processing_task:
@@ -853,6 +912,15 @@ class MultiprocessModelScheduler:
                     f"No models available for feature: {job_request.feature}",
                 )
                 return
+            elif isinstance(worker_result, str) and worker_result.startswith(
+                "LOAD_FAILED:"
+            ):
+                load_error = worker_result[len("LOAD_FAILED:") :]
+                await self.job_queue.fail_job(job_request.job_id, load_error)
+                logger.error(
+                    f"Job {job_request.job_id} failed: model worker could not load: {load_error}"
+                )
+                return
             elif worker_result in ["WORKERS_BUSY", "NO_VRAM"]:
                 # Resources unavailable - put job back at front of queue and wait
                 logger.info(
@@ -896,7 +964,9 @@ class MultiprocessModelScheduler:
             # Create a separate task to handle the result asynchronously
             # This allows the main loop to continue processing other jobs
             asyncio.create_task(
-                self._handle_job_result(job_request.job_id, result_future)
+                self._handle_job_result(
+                    job_request.job_id, result_future, worker_id
+                )
             )
             logger.info(
                 f"Job {job_request.job_id} submitted to worker, result will be handled asynchronously"
@@ -921,11 +991,58 @@ class MultiprocessModelScheduler:
                 # Non-transient error - fail immediately
                 await self.job_queue.fail_job(job_request.job_id, str(e))
 
-    async def _handle_job_result(self, job_id: str, result_future: asyncio.Future):
+    @staticmethod
+    def _wait_worker_ready(
+        ready_queue: mp.Queue,
+        worker_process: mp.Process,
+        timeout_sec: int,
+    ) -> Dict[str, Any]:
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            if not worker_process.is_alive():
+                return {
+                    "success": False,
+                    "error": "Worker process exited before model load completed",
+                }
+            try:
+                return ready_queue.get(timeout=1.0)
+            except queue.Empty:
+                continue
+        return {"success": False, "error": "Timed out waiting for worker model load"}
+
+    async def _handle_job_result(
+        self, job_id: str, result_future: asyncio.Future, worker_id: str
+    ):
         """Handle job result asynchronously without blocking the main processing loop"""
         try:
             logger.info(f"Waiting for result for job {job_id}")
-            result = await result_future
+            poll_interval = 5.0
+            max_wait_sec = 4 * 3600
+            elapsed = 0.0
+            while elapsed < max_wait_sec:
+                worker = self.workers.get(worker_id)
+                if worker is not None and not worker.is_alive():
+                    await self.job_queue.fail_job(
+                        job_id,
+                        "Worker process terminated before job completed",
+                    )
+                    logger.error(
+                        f"Job {job_id} failed: worker {worker_id} died unexpectedly"
+                    )
+                    self._mark_worker_available(worker_id)
+                    return
+                if result_future.done():
+                    break
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+            else:
+                await self.job_queue.fail_job(
+                    job_id, "Job timed out waiting for worker result"
+                )
+                logger.error(f"Job {job_id} timed out after {max_wait_sec}s")
+                return
+
+            result = result_future.result()
             logger.info(f"Received result for job {job_id}: {result}")
 
             # Update job status through JobQueue
@@ -1041,11 +1158,13 @@ class MultiprocessModelScheduler:
             return "NO_VRAM"
 
         # Create new worker
+        self._last_worker_load_error = None
         worker_id = await self._create_worker_for_model(target_model_id, gpu_id)
         if worker_id:
             return worker_id
-        else:
-            return "NO_VRAM"  # Failed to create worker, likely VRAM issue
+        if self._last_worker_load_error:
+            return f"LOAD_FAILED:{self._last_worker_load_error}"
+        return "NO_VRAM"  # Failed to create worker, likely VRAM issue
 
     async def _create_worker_for_model(
         self, model_id: str, gpu_id: int
@@ -1076,6 +1195,7 @@ class MultiprocessModelScheduler:
             response_queue = mp.Queue()
             control_queue = mp.Queue()
             control_response_queue = mp.Queue()
+            ready_queue = mp.Queue(maxsize=1)
 
             # Create and start worker process
             worker_process = mp.Process(
@@ -1086,6 +1206,7 @@ class MultiprocessModelScheduler:
                     response_queue,
                     control_queue,
                     control_response_queue,
+                    ready_queue,
                 ),
                 name=worker_id,
             )
@@ -1113,6 +1234,20 @@ class MultiprocessModelScheduler:
                 f"Created worker {worker_id} for model {model_id} on GPU {gpu_id}"
             )
 
+            ready = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._wait_worker_ready(ready_queue, worker_process, 900)
+            )
+            if not ready.get("success"):
+                error = ready.get("error", "Worker failed during model load")
+                logger.error(
+                    f"Worker {worker_id} not ready for model {model_id}: {error}"
+                )
+                self._last_worker_load_error = str(error)
+                await self._destroy_worker(worker_id)
+                self.gpu_monitor.deallocate_vram(gpu_id, vram_requirement)
+                return None
+
+            self._last_worker_load_error = None
             return worker_id
 
         except Exception as e:

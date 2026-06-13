@@ -17,7 +17,14 @@ from utils.unirig_utils import InferenceConfig, UniRigInferenceEngine
 from core.models.base import ModelStatus
 from core.models.rig_models import AutoRigModel
 from core.utils.file_utils import OutputPathGenerator
-from core.utils.format_utils import fbx_to_glb
+from core.utils.format_utils import (
+    apply_humanoid_template_rig,
+    extract_vrm_skeleton_fbx,
+    fbx_to_glb,
+    merge_rigged_fbx_with_source_mesh,
+    source_mesh_has_textures,
+)
+from core.utils.humanoid_template import get_template, template_paths_available
 from core.utils.mesh_utils import MeshProcessor
 
 logger = logging.getLogger(__name__)
@@ -49,7 +56,7 @@ class UniRigAdapter(AutoRigModel):
             model_id=model_id,
             model_path=model_path,
             vram_requirement=vram_requirement,
-            supported_input_formats=["fbx", "obj", "glb"],
+            supported_input_formats=["fbx", "obj", "glb", "vrm"],
             supported_output_formats=["fbx"],
         )
 
@@ -148,11 +155,13 @@ class UniRigAdapter(AutoRigModel):
             with_skinning = inputs.get("with_skinning", True)
             skeleton_config = inputs.get("skeleton_config", None)
             skin_config = inputs.get("skin_config", None)
+            humanoid_template_id = inputs.get("humanoid_template_id")
 
             # Validate rig mode
-            if rig_mode not in ["skeleton", "skin", "full"]:
+            if rig_mode not in ["skeleton", "skin", "full", "template"]:
                 raise ValueError(
-                    f"Invalid rig_mode: {rig_mode}. Must be 'skeleton', 'skin', or 'full'"
+                    f"Invalid rig_mode: {rig_mode}. "
+                    "Must be 'skeleton', 'skin', 'full', or 'template'"
                 )
 
             logger.info(f"Auto-rigging mesh with UniRig: {mesh_path}, mode: {rig_mode}")
@@ -179,7 +188,22 @@ class UniRigAdapter(AutoRigModel):
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            if rig_mode == "skeleton":
+            if rig_mode == "template":
+                template_id = humanoid_template_id or "template"
+                spec = get_template(template_id)
+                if not spec.vrm_path.is_file():
+                    raise FileNotFoundError(f"Humanoid template VRM missing: {spec.vrm_path}")
+                glb_output = (
+                    output_path if output_format == "glb" else output_path.with_suffix(".glb")
+                )
+                result_path, rig_validation = apply_humanoid_template_rig(
+                    str(spec.vrm_path),
+                    str(mesh_path),
+                    str(glb_output),
+                )
+                has_skinning = True
+                rig_fbx_path = None
+            elif rig_mode == "skeleton":
                 # NOTE: using await here will make blender context incorrect
                 result_path = self.inference_engine.generate_skeleton(
                     str(mesh_path),
@@ -208,8 +232,29 @@ class UniRigAdapter(AutoRigModel):
                 )
                 has_skinning = with_skinning
 
-            # convert fbx to glb
-            result_path = fbx_to_glb(result_path)
+            # Convert rig FBX to GLB; preserve source textures when possible.
+            if rig_mode != "template":
+                rig_fbx_path = Path(result_path)
+                if rig_fbx_path.suffix.lower() != ".fbx":
+                    rig_fbx_path = rig_fbx_path.with_suffix(".fbx")
+                glb_output = (
+                    output_path
+                    if output_format == "glb"
+                    else rig_fbx_path.with_suffix(".glb")
+                )
+                if source_mesh_has_textures(mesh_path) and rig_fbx_path.is_file():
+                    logger.info(
+                        "Preserving source textures while attaching rig: %s",
+                        mesh_path,
+                    )
+                    result_path = merge_rigged_fbx_with_source_mesh(
+                        str(mesh_path),
+                        str(rig_fbx_path),
+                        str(glb_output),
+                        apply_skinning=has_skinning,
+                    )
+                else:
+                    result_path = fbx_to_glb(str(rig_fbx_path), str(glb_output))
 
             # Verify output was created
             if not Path(result_path).exists():
@@ -218,17 +263,23 @@ class UniRigAdapter(AutoRigModel):
             # Estimate bone count from output (simplified approach)
             bone_count = self._estimate_bone_count(Path(result_path))
 
-            # Create rig info
+            generation_method = (
+                "humanoid_vrm_template"
+                if rig_mode == "template"
+                else "unirig_fast_inference"
+            )
             rig_info = {
-                "rig_type": "auto_detected",
+                "rig_type": "humanoid_template" if rig_mode == "template" else "auto_detected",
                 "has_skinning": has_skinning,
                 "skeleton_only": rig_mode == "skeleton",
-                "generation_method": "unirig_fast_inference",
+                "generation_method": generation_method,
                 "bone_count": bone_count,
                 "rig_mode": rig_mode,
             }
+            if rig_mode == "template":
+                rig_info["humanoid_template_id"] = humanoid_template_id or "template"
+                rig_info["validation"] = rig_validation
 
-            # Create response
             response = {
                 "output_mesh_path": str(result_path),
                 "bone_count": bone_count,
@@ -243,6 +294,7 @@ class UniRigAdapter(AutoRigModel):
                     "rig_mode": rig_mode,
                     "device": self.device,
                     "seed": seed,
+                    "humanoid_template_id": humanoid_template_id,
                 },
             }
 
@@ -320,7 +372,7 @@ class UniRigAdapter(AutoRigModel):
                     "cuda_required": True,
                 },
                 "interface": "fast_inference_engine",
-                "supported_modes": ["skeleton", "skin", "full"],
+                "supported_modes": ["skeleton", "skin", "full", "template"],
                 "performance": {
                     "skeleton_generation": "~30-60 seconds",
                     "skin_generation": "~60-120 seconds",
@@ -341,10 +393,16 @@ class UniRigAdapter(AutoRigModel):
             "parameters": {
                 "rig_mode": {
                     "type": "string",
-                    "description": "Rigging mode: skeleton only, skin weights only, or full pipeline",
+                    "description": "Rigging mode: skeleton, skin, full, or template VRM fit",
                     "default": "full",
-                    "enum": ["skeleton", "skin", "full"],
-                    "required": False
+                    "enum": ["skeleton", "skin", "full", "template"],
+                    "required": False,
+                },
+                "humanoid_template_id": {
+                    "type": "string",
+                    "description": "Template id when rig_mode is template (default: template → template.vrm)",
+                    "default": "template",
+                    "required": False,
                 },
                 "seed": {
                     "type": "integer",

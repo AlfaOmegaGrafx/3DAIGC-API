@@ -70,6 +70,10 @@ fi
 # Set environment variables
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
+# CUDA 12.x + spconv/cumm arch list (default /usr/local/cuda may point at CUDA 13).
+# shellcheck source=scripts/env_local_gpu.sh
+source "$(dirname "$0")/env_local_gpu.sh"
+
 # Essential configuration parameters
 export P3D_USER_AUTH_ENABLED="$USER_AUTH_ENABLED"
 export P3D_DEBUG="$DEBUG_MODE"
@@ -117,9 +121,48 @@ SCHEDULER_PID_FILE="$PID_DIR/scheduler.pid"
 API_PID_FILE="$PID_DIR/api.pid"
 
 # Function to cleanup processes on exit
+wait_for_jobs_to_finish() {
+    local redis_url="${P3D_REDIS_URL:-redis://localhost:6379}"
+    local max_wait="${P3D_SHUTDOWN_DRAIN_SEC:-7200}"
+    local poll="${P3D_SHUTDOWN_POLL_SEC:-5}"
+
+    if [[ "${P3D_DRAIN_JOBS_ON_SHUTDOWN:-1}" != "1" ]]; then
+        return 0
+    fi
+    if ! command -v redis-cli &> /dev/null; then
+        echo "   (redis-cli unavailable; skipping job drain before shutdown)"
+        return 0
+    fi
+
+    local processing
+    processing="$(redis-cli -u "$redis_url" SCARD 3daigc:queue:processing 2>/dev/null || echo 0)"
+    if [[ "${processing:-0}" -eq 0 ]]; then
+        return 0
+    fi
+
+    echo "   Waiting for ${processing} in-flight GPU job(s) to finish (max ${max_wait}s)..."
+    echo "   Tip: run under nohup/systemd so closing the terminal does not stop long jobs."
+    local elapsed=0
+    while [[ "$elapsed" -lt "$max_wait" ]]; do
+        processing="$(redis-cli -u "$redis_url" SCARD 3daigc:queue:processing 2>/dev/null || echo 0)"
+        if [[ "${processing:-0}" -eq 0 ]]; then
+            echo "   All in-flight jobs finished."
+            return 0
+        fi
+        if (( elapsed % 60 == 0 && elapsed > 0 )); then
+            echo "   Still waiting... ${processing} job(s) processing (${elapsed}s elapsed)"
+        fi
+        sleep "$poll"
+        elapsed=$((elapsed + poll))
+    done
+    echo "   Drain timeout (${max_wait}s) — stopping scheduler anyway."
+}
+
 cleanup() {
     echo ""
     echo "🛑 Shutting down services..."
+
+    wait_for_jobs_to_finish
     
     # Stop API workers
     if [ -f "$API_PID_FILE" ]; then
@@ -162,7 +205,7 @@ trap cleanup SIGINT SIGTERM
 
 # Start scheduler service
 echo "🔧 Starting scheduler service..."
-python scripts/scheduler_service.py --redis-url "$REDIS_URL" --log-level "$LOG_LEVEL" > logs/scheduler.log 2>&1 &
+./venv/bin/python scripts/scheduler_service.py --redis-url "$REDIS_URL" --log-level "$LOG_LEVEL" > logs/scheduler.log 2>&1 &
 SCHEDULER_PID=$!
 echo $SCHEDULER_PID > "$SCHEDULER_PID_FILE"
 echo "   Scheduler service started (PID: $SCHEDULER_PID)"

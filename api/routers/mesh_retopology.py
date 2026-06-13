@@ -70,8 +70,11 @@ class MeshRetopologyRequest(BaseModel):
     output_format: str = Field("obj", description="Output format for retopologized mesh")
     seed: Optional[int] = Field(None, description="Random seed for reproducibility")
     model_preference: str = Field(
-        "fastmesh_v1k_retopology",
-        description="Name of the retopology model to use (fastmesh_v1k_retopology or fastmesh_v4k_retopology)",
+        "instant_meshes_retopology",
+        description=(
+            "Retopology model: instant_meshes_retopology (commercial, BSD-3), "
+            "or fastmesh_v1k/v4k_retopology (non-commercial, disabled by default)"
+        ),
     )
     model_parameters: Optional[dict] = Field(
         None, 

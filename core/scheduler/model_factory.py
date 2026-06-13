@@ -79,6 +79,11 @@ class ModelFactory:
             "module": "adapters.unirig_adapter",
             "class": "UniRigAdapter",
         },
+        # SkinTokens / TokenRig adapters
+        "skintokens_auto_rig": {
+            "module": "adapters.skintokens_adapter",
+            "class": "SkinTokensAdapter",
+        },
         # FastMesh adapters
         "fastmesh_v1k_retopology": {
             "module": "adapters.fastmesh_adapter",
@@ -93,10 +98,29 @@ class ModelFactory:
             "module": "adapters.partuv_adapter",
             "class": "PartUVUnwrappingAdapter",
         },
+        # xatlas UV (commercial-safe)
+        "xatlas_uv_unwrapping": {
+            "module": "adapters.xatlas_adapter",
+            "class": "XatlasUVUnwrappingAdapter",
+        },
+        # Instant Meshes retopo (commercial-safe)
+        "instant_meshes_retopology": {
+            "module": "adapters.instant_meshes_adapter",
+            "class": "InstantMeshesRetopologyAdapter",
+        },
         # UltraShape adapters
         "ultrashape_image_to_raw_mesh": {
             "module": "adapters.ultrashape_adapter",
             "class": "UltraShapeImageToRawMeshAdapter",
+        },
+        # TripoSplat (MIT — image → Gaussian splats)
+        "triposplat_image_to_splat": {
+            "module": "adapters.triposplat_adapter",
+            "class": "TripoSplatImageToSplatAdapter",
+        },
+        "opennexus_image_to_world": {
+            "module": "adapters.image_to_world_adapter",
+            "class": "ImageToWorldAdapter",
         },
         # VoxHammer adapters
         "voxhammer_text_mesh_editing": {
@@ -170,6 +194,40 @@ class ModelFactory:
             # Add any additional parameters from config
             if "vram_requirement" in config:
                 init_params["vram_requirement"] = config["vram_requirement"]
+            if config.get("model_path"):
+                mp = config["model_path"]
+                if model_id == "skintokens_auto_rig":
+                    init_params.setdefault("skintokens_root", mp)
+                    init_params.setdefault("model_path", mp)
+                elif model_id.startswith("trellis2_"):
+                    init_params.setdefault(
+                        "trellis2_root",
+                        mp if mp.startswith("thirdparty/") else "thirdparty/TRELLIS.2",
+                    )
+                    if mp.startswith("thirdparty/"):
+                        init_params["model_path"] = "pretrained/TRELLIS.2"
+                    else:
+                        init_params.setdefault("model_path", mp)
+                elif model_id.startswith("trellis_"):
+                    init_params.setdefault(
+                        "trellis_root",
+                        mp if mp.startswith("thirdparty/") else "thirdparty/TRELLIS",
+                    )
+                    if mp.startswith("thirdparty/"):
+                        init_params["model_path"] = "pretrained/TRELLIS"
+                    else:
+                        init_params.setdefault("model_path", mp)
+                elif model_id.startswith("hunyuan3dv21_"):
+                    init_params.setdefault(
+                        "hunyuan3d_root",
+                        mp if mp.startswith("thirdparty/") else "thirdparty/Hunyuan3D-2.1",
+                    )
+                    if mp.startswith("thirdparty/"):
+                        init_params["model_path"] = "pretrained/tencent/Hunyuan3D-2.1"
+                    else:
+                        init_params.setdefault("model_path", mp)
+                else:
+                    init_params.setdefault("model_path", mp)
 
             model_instance = model_class(**init_params)
 
@@ -317,6 +375,7 @@ def get_model_configs_from_settings(
                 supported_inputs = getattr(model_config, "supported_inputs", [])
                 supported_outputs = getattr(model_config, "supported_outputs", [])
                 max_workers = getattr(model_config, "max_workers", 1)
+                init_params = dict(getattr(model_config, "init_params", None) or {})
             else:
                 logger.warning(f"Unknown model config type for {model_id}, skipping")
                 continue
@@ -334,12 +393,30 @@ def get_model_configs_from_settings(
                 feature_type=feature_type,
                 vram_requirement=vram_requirement,
                 max_workers=max_workers,
-                init_params={},
+                init_params=init_params,
             )
 
             # Add additional configuration
             if model_path:
                 config["model_path"] = model_path
+                config["init_params"]["model_path"] = model_path
+                if model_id == "skintokens_auto_rig":
+                    config["init_params"]["skintokens_root"] = model_path
+                elif model_id.startswith("trellis2_"):
+                    config["init_params"]["trellis2_root"] = model_path
+                    weights_path = "pretrained/TRELLIS.2"
+                    config["init_params"]["model_path"] = weights_path
+                    config["model_path"] = weights_path
+                elif model_id.startswith("trellis_"):
+                    config["init_params"]["trellis_root"] = model_path
+                    weights_path = "pretrained/TRELLIS"
+                    config["init_params"]["model_path"] = weights_path
+                    config["model_path"] = weights_path
+                elif model_id.startswith("hunyuan3dv21_"):
+                    config["init_params"]["hunyuan3d_root"] = model_path
+                    weights_path = "pretrained/tencent/Hunyuan3D-2.1"
+                    config["init_params"]["model_path"] = weights_path
+                    config["model_path"] = weights_path
             if supported_inputs:
                 config["supported_inputs"] = supported_inputs
             if supported_outputs:
@@ -441,6 +518,17 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
         }
     )
 
+    # SkinTokens models
+    configs.update(
+        {
+            "skintokens_auto_rig": ModelFactory.create_model_config(
+                model_id="skintokens_auto_rig",
+                feature_type="auto_rig",
+                vram_requirement=15360,  # 15GB (upstream recommends >=14GB)
+            )
+        }
+    )
+
     # FastMesh models
     configs.update(
         {
@@ -468,6 +556,40 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
         }
     )
 
+    # xatlas UV
+    configs.update(
+        {
+            "xatlas_uv_unwrapping": ModelFactory.create_model_config(
+                model_id="xatlas_uv_unwrapping",
+                feature_type="uv_unwrapping",
+                vram_requirement=512,
+            )
+        }
+    )
+
+    # Instant Meshes retopo
+    configs.update(
+        {
+            "instant_meshes_retopology": ModelFactory.create_model_config(
+                model_id="instant_meshes_retopology",
+                feature_type="mesh_retopology",
+                vram_requirement=512,
+                init_params={"default_target_vertex_count": 4000},
+            )
+        }
+    )
+
+    # P3-SAM segmentation
+    configs.update(
+        {
+            "p3sam_mesh_segmentation": ModelFactory.create_model_config(
+                model_id="p3sam_mesh_segmentation",
+                feature_type="mesh_segmentation",
+                vram_requirement=61440,
+            )
+        }
+    )
+
     # UltraShape models
     configs.update(
         {
@@ -475,6 +597,28 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 model_id="ultrashape_image_to_raw_mesh",
                 feature_type="image_to_raw_mesh",
                 vram_requirement=20480,  # 20GB
+            )
+        }
+    )
+
+    # TripoSplat (MIT)
+    configs.update(
+        {
+            "triposplat_image_to_splat": ModelFactory.create_model_config(
+                model_id="triposplat_image_to_splat",
+                feature_type="image_to_splat",
+                vram_requirement=16384,
+            )
+        }
+    )
+
+    # Image-to-world orchestrator (DGX-local)
+    configs.update(
+        {
+            "opennexus_image_to_world": ModelFactory.create_model_config(
+                model_id="opennexus_image_to_world",
+                feature_type="image_to_world",
+                vram_requirement=20480,
             )
         }
     )

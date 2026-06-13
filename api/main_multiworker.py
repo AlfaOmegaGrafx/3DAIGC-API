@@ -55,11 +55,18 @@ file_store = None
 
 # Configure CORS
 def configure_cors(app: FastAPI, settings):
-    """Configure CORS middleware"""
+    """Configure CORS middleware.
+
+    Wildcard origins cannot be combined with credentialed CORS (browser spec).
+    This API uses Bearer tokens in Authorization, not cookies, so credentials
+    are unnecessary and ``["*"]`` works for browser clients (e.g. Vite dev).
+    """
+    origins = settings.security.cors_origins
+    allow_credentials = origins != ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.security.cors_origins,
-        allow_credentials=True,
+        allow_origins=origins,
+        allow_credentials=allow_credentials,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
@@ -299,6 +306,17 @@ app.include_router(mesh_retopology.router, prefix="/api/v1", tags=["Mesh Retopol
 
 app.include_router(
     mesh_uv_unwrapping.router, prefix="/api/v1", tags=["Mesh UV Unwrapping"]
+)
+
+from api.routers import splat_generation
+from api.routers import world_generation
+
+app.include_router(
+    splat_generation.router, prefix="/api/v1", tags=["Splat Generation"]
+)
+
+app.include_router(
+    world_generation.router, prefix="/api/v1", tags=["World Generation"]
 )
 
 

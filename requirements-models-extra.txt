@@ -1,0 +1,50 @@
+# Extra dependencies for 3DAIGC model adapters and thirdparty/TRELLIS imports.
+# Install after base requirements.txt, from repo root:
+#   ./venv/bin/pip install -r requirements-models-extra.txt
+# Then install native stacks as needed (see scripts/bootstrap_local_models.sh).
+
+plyfile>=1.0.0
+python-box>=7.0.0
+kiui>=0.3.0
+opencv-python-headless>=4.8.0
+
+# TRELLIS: attention + image preprocessing (aarch64 has no onnxruntime-gpu wheels; CPU is fine for rembg)
+xformers
+rembg[cpu]
+onnxruntime>=1.16.0
+
+# TRELLIS: same commit as thirdparty/TRELLIS/setup.sh (install without pulling PyPI open3d / moderngl pins)
+# Installed by scripts/bootstrap_local_models.sh via:
+#   pip install --no-deps git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
+
+# UniRig mesh preprocessing (with Blender bpy)
+tqdm>=4.65.0
+fast_simplification>=0.1.13
+
+# Commercial UV route (xatlas_uv_unwrapping)
+xatlas>=0.0.9
+
+# UniRig torch_cluster / torch_scatter: use a PyG wheel for your torch+CUDA+arch, or build with CUDA_HOME
+# set to CUDA 12.x matching PyTorch, e.g.:
+#   pip install --no-build-isolation torch-scatter torch-cluster -f https://data.pyg.org/whl/torch-2.11.0+cu128.html
+#
+# -------------------------------------------------------------------------------------------------
+# Native build prerequisites (no sudo? see fallback below)
+# -------------------------------------------------------------------------------------------------
+# 1) CUDA 12.x toolkit matching PyTorch cu128. On aarch64 with glibc >= 2.39, nvcc 12.0-12.3 chokes
+#    on SVE intrinsics in <bits/math-vector.h>; install CUDA 12.4+ (NVIDIA recommends 12.8) and:
+#      export CUDA_HOME=/usr/local/cuda-12.8 && export PATH="$CUDA_HOME/bin:$PATH"
+# 2) Python development headers (Python.h):
+#      sudo apt install python3.12-dev
+#    No sudo? Extract the .deb locally and point CPATH at it:
+#      cd /tmp && apt download python3.12-dev libpython3.12-dev
+#      mkdir -p $HOME/.local/py312-dev
+#      dpkg -x libpython3.12-dev_*.deb $HOME/.local/py312-dev/
+#      dpkg -x python3.12-dev_*.deb    $HOME/.local/py312-dev/
+#    Builds need both .../usr/include (multiarch pyconfig.h) and .../usr/include/python3.12;
+#    scripts/build_spconv_local.sh and install_next_steps.sh add both to CPATH automatically.
+# 3) When using distro CUDA 12.0/12.1: install gcc-12 g++-12; the scripts set CC/CXX and NVCC -ccbin.
+# 4) Kaolin (TRELLIS FlexiCubes optional path): no aarch64+cu128 wheel index is published. The
+#    in-tree flexicubes.py uses kaolin.utils.testing.check_tensor only; we ship a permissive
+#    fallback so the TRELLIS pipeline imports without kaolin. Install Kaolin from source if
+#    you want the full kaolin feature set on aarch64.

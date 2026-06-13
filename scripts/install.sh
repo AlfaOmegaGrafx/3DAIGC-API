@@ -1,4 +1,27 @@
 #!/bin/bash
+#
+# ------------------------------------------------------------------------------
+# Realistic full stack (TRELLIS / spconv / kaolin / all thirdparty builds)
+#
+# Prefer the container path from the repo root (NVIDIA Container Toolkit required):
+#   docker compose up -d --build
+#
+# The Dockerfile uses CUDA 12.4 devel + Miniconda on Ubuntu 20.04 and matches the
+# wheels and compile steps this script expects (x86_64). See README "Docker".
+#
+# This bare-metal script targets an already-activated Conda env on Linux x86_64
+# with CUDA compatible with PyTorch cu124. Uncomment the "conda create" line
+# below if you want this script to create `3daigc-api` for you.
+#
+# aarch64 (e.g. DGX Spark): many pip wheels here are x86_64-only. Use an ARM-capable
+# image/pipeline, or a cloud GPU template (e.g. RunPod in README), unless you
+# maintain your own aarch64 builds. Local venv: ./scripts/install_local_venv_extras.sh
+# (or ./scripts/bootstrap_local_models.sh then ./scripts/install_next_steps.sh); for
+# each shell: source ./scripts/env_local_gpu.sh then ./scripts/run_local_venv.sh
+#
+# Before either path:  git submodule update --init --recursive
+# (bootstrap script runs this for you.)
+# ------------------------------------------------------------------------------
 
 echo "========================================"
 echo "Starting 3DAIGC-API Installation"
@@ -6,17 +29,19 @@ echo "========================================"
 echo "The installation may take a while, please wait..."
 echo ""
 
-echo "[INFO] Creating conda environment '3daigc-api' with Python 3.10..."
-# conda create -n 3daigc-api python=3.10 -y
-if [ $? -eq 0 ]; then
-    echo "[SUCCESS] Conda environment created successfully"
-else
-    echo "[ERROR] Failed to create conda environment"
+if ! command -v conda >/dev/null 2>&1; then
+    echo "[ERROR] conda not found in PATH."
+    echo "        Use Docker (recommended):  docker compose up -d --build"
+    echo "        Or install Miniconda and re-run from an activated env."
     exit 1
 fi
 
-echo "[INFO] Activating conda environment..."
+echo "[INFO] Conda env: ${CONDA_DEFAULT_ENV:-"(none — activate 3daigc-api first)"}"
+# To create the env automatically, uncomment:
+# conda create -n 3daigc-api python=3.10 -y
 # conda activate 3daigc-api
+
+echo "[INFO] Using python: $(command -v python || true) ($(python -V 2>/dev/null || true))"
 
 echo "[INFO] Installing PyTorch with CUDA 12.4 support..."
 ## install pytorch for specific cuda versions

@@ -1,0 +1,15 @@
+{
+  "template_id": "template",
+  "description": "Master humanoid VRM with ARKit/Vive facial blend shapes (legacy manifest id: sifr2)",
+  "vrm_path": "assets/example_autorig/template.vrm",
+  "skeleton_fbx_path": "assets/example_autorig/skeleton/template.fbx",
+  "expected": {
+    "spec": "0.x",
+    "morph_target_count": 124,
+    "blend_shape_group_count": 180,
+    "human_bone_count": 54,
+    "skin_joint_count": 73,
+    "total_vertices": 70344,
+    "required_presets": ["blink", "blink_l", "blink_r", "neutral"]
+  }
+}

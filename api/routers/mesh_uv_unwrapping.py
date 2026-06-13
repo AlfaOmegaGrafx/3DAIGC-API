@@ -74,8 +74,11 @@ class MeshUVUnwrappingRequest(BaseModel):
     save_visuals: bool = Field(False, description="Save visualization images")
     output_format: str = Field("obj", description="Output format for UV unwrapped mesh")
     model_preference: str = Field(
-        "partuv_uv_unwrapping",
-        description="Name of the UV unwrapping model to use",
+        "xatlas_uv_unwrapping",
+        description=(
+            "UV model: xatlas_uv_unwrapping (MIT, commercial) or "
+            "partuv_uv_unwrapping (non-commercial, disabled by default)"
+        ),
     )
     model_parameters: Optional[dict] = Field(
         None, 

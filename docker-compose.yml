@@ -22,9 +22,9 @@ services:
       dockerfile: Dockerfile
       network: host
       args:
-        - http_proxy=http://127.0.0.1:7890
-        - https_proxy=http://127.0.0.1:7890
-        - no_proxy=localhost,127.0.0.1
+        http_proxy: ${HTTP_PROXY:-}
+        https_proxy: ${HTTPS_PROXY:-}
+        no_proxy: ${NO_PROXY:-localhost,127.0.0.1}
       extra_hosts:
         - "host.docker.internal:host-gateway"
     container_name: 3daigc-scheduler
@@ -38,13 +38,14 @@ services:
       - ./logs:/app/logs
       - ./config:/app/config:ro
     environment:
-      - http_proxy=http://host.docker.internal:7890
-      - https_proxy=http://host.docker.internal:7890
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1}
       - PYTHONPATH=/app
       - P3D_REDIS_URL=redis://redis:6379
       - ENVIRONMENT=production
-      - CUDA_VISIBLE_DEVICES=0,1,5,6,7
-      - TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6 8.9"
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST:-6.0 6.1 7.0 7.5 8.0 8.6 8.9}
       - P3D_USER_AUTH_ENABLED=${P3D_USER_AUTH_ENABLED:-false}
       - P3D_DEBUG=${P3D_DEBUG:-false}
     runtime: nvidia
@@ -74,9 +75,9 @@ services:
       dockerfile: Dockerfile
       network: host
       args:
-        - http_proxy=http://127.0.0.1:7890
-        - https_proxy=http://127.0.0.1:7890
-        - no_proxy=localhost,127.0.0.1
+        http_proxy: ${HTTP_PROXY:-}
+        https_proxy: ${HTTPS_PROXY:-}
+        no_proxy: ${NO_PROXY:-localhost,127.0.0.1}
       extra_hosts:
         - "host.docker.internal:host-gateway"
     container_name: 3daigc-api
@@ -92,13 +93,14 @@ services:
       - ./logs:/app/logs
       - ./config:/app/config:ro
     environment:
-      - http_proxy=http://host.docker.internal:7890
-      - https_proxy=http://host.docker.internal:7890
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1}
       - PYTHONPATH=/app
       - P3D_REDIS_URL=redis://redis:6379
       - ENVIRONMENT=production
-      - CUDA_VISIBLE_DEVICES=0,1,5,6,7
-      - TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0 7.5 8.0 8.6 8.9"
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST:-6.0 6.1 7.0 7.5 8.0 8.6 8.9}
       - P3D_USER_AUTH_ENABLED=${P3D_USER_AUTH_ENABLED:-false}
       - P3D_DEBUG=${P3D_DEBUG:-false}
     runtime: nvidia

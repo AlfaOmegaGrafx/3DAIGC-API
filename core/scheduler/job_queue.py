@@ -452,6 +452,17 @@ class JobQueue:
 
                 logger.error(f"Failed job {job_id}: {error}")
 
+    async def fail_processing_jobs(self, error: str) -> int:
+        """Mark every in-flight job as failed (e.g. scheduler shutdown)."""
+        async with self._cache_lock:
+            job_ids = list(self._processing_cache.keys())
+
+        failed_count = 0
+        for job_id in job_ids:
+            await self.fail_job(job_id, error)
+            failed_count += 1
+        return failed_count
+
     async def cancel_job(self, job_id: str) -> bool:
         """Cancel a job if it's still queued"""
         async with self._cache_lock:

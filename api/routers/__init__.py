@@ -8,7 +8,9 @@ from . import (
     mesh_retopology,
     mesh_segmentation,
     mesh_uv_unwrapping,
+    splat_generation,
     system,
+    world_generation,
 )
 
 __all__ = [
@@ -19,5 +21,7 @@ __all__ = [
     "mesh_retopology",
     "mesh_segmentation",
     "mesh_uv_unwrapping",
+    "splat_generation",
     "system",
+    "world_generation",
 ]

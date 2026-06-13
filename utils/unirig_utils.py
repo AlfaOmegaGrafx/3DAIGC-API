@@ -10,6 +10,7 @@ import logging
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -19,13 +20,13 @@ from box import Box
 
 from thirdparty.UniRig.src.data.datapath import Datapath
 from thirdparty.UniRig.src.data.dataset import DatasetConfig, UniRigDatasetModule
-from thirdparty.UniRig.src.data.extract import extract_builtin
 from thirdparty.UniRig.src.data.transform import TransformConfig
 from thirdparty.UniRig.src.inference.download import download
 from thirdparty.UniRig.src.model.parse import get_model
 from thirdparty.UniRig.src.system.parse import get_system, get_writer
 from thirdparty.UniRig.src.tokenizer.parse import get_tokenizer
 from thirdparty.UniRig.src.tokenizer.spec import TokenizerConfig
+from utils.blender_runtime import install_exporter_bpy_shim, run_extract_builtin
 
 CONFIG_PREFIX = "thirdparty/UniRig"
 torch.serialization.add_safe_globals([Box])
@@ -230,6 +231,9 @@ class UniRigInferenceEngine:
         # Set global precision and seed
         self._setup_environment()
 
+        # aarch64 / API venv: use system Blender when bpy is not pip-installed
+        install_exporter_bpy_shim()
+
         # Loaded checkpoint paths to avoid re-downloading
         self._checkpoint_cache = {}
 
@@ -305,16 +309,15 @@ class UniRigInferenceEngine:
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
 
-        # Use extract_builtin to process the file
-        files = [(os.path.abspath(input_path), output_dir)]  # List of (input_file, output_dir) tuples
+        files = [(os.path.abspath(input_path), output_dir)]
         self.logger.info(f"files to process: {files} ")
         try:
-            extract_builtin(
+            run_extract_builtin(
                 output_folder=cache_dir,
                 target_count=faces_target_count,
                 num_runs=1,
-                id=0,
-                time="inference",  # Use fixed time for inference
+                job_id=0,
+                time="inference",
                 files=files,
             )
 
@@ -595,11 +598,17 @@ class UniRigInferenceEngine:
         """
         self.logger.info("Starting full rigging pipeline")
 
+        # UniRig writers emit FBX; do not pass a .glb path into skeleton/skin stages.
+        fbx_filename = None
+        if output_filename:
+            fbx_filename = str(Path(output_filename).with_suffix(".fbx"))
+            Path(fbx_filename).parent.mkdir(parents=True, exist_ok=True)
+
         # Step 1: Generate skeleton (preprocesses input FBX internally)
         skeleton_result = self.generate_skeleton(
             input_path=input_path,
-            output_dir=self.config.cache_dir,
-            output_filename=output_filename,
+            output_dir=str(Path(fbx_filename).parent) if fbx_filename else self.config.cache_dir,
+            output_filename=fbx_filename,
             **kwargs,
         )
 
@@ -607,7 +616,7 @@ class UniRigInferenceEngine:
         skin_result = self.generate_skin_weights(
             input_path=skeleton_result,
             output_dir=output_dir,
-            output_filename=skeleton_result,
+            output_filename=fbx_filename or skeleton_result,
             **kwargs,
         )
 

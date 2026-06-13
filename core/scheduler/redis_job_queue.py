@@ -163,6 +163,9 @@ class RedisJobQueue:
         if job_data_str:
             job_data = json.loads(job_data_str)
             job_data["status"] = _status_to_str(JobStatus.QUEUED)
+            job_data["created_at"] = datetime.utcnow().isoformat()
+            job_data.pop("error", None)
+            job_data.pop("failed_at", None)
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
             
             # Re-add to queue with same priority but earlier timestamp for FIFO
@@ -207,6 +210,23 @@ class RedisJobQueue:
             job_data["error"] = error
             job_data["failed_at"] = datetime.utcnow().isoformat()
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
+
+    async def fail_processing_jobs(self, error: str) -> int:
+        """Mark every in-flight job as failed (e.g. scheduler shutdown)."""
+        if not self.redis:
+            raise RuntimeError("Redis not connected")
+
+        processing_job_ids = await self.redis.smembers(self.processing_set_key)
+        if not processing_job_ids:
+            return 0
+
+        failed_count = 0
+        for job_id in processing_job_ids:
+            await self.fail_job(job_id, error)
+            failed_count += 1
+            logger.warning(f"Marked in-flight job {job_id} as failed: {error}")
+
+        return failed_count
 
     async def get_job(self, job_id: str) -> Optional[Dict]:
         """Get job status and result"""
@@ -323,6 +343,38 @@ class RedisJobQueue:
         """Alias for cleanup_old_jobs for compatibility"""
         await self.cleanup_old_jobs()
     
+    def _job_request_from_redis(self, job_id: str, job_data: dict) -> JobRequest:
+        """Rebuild a JobRequest with full status/error fields from Redis JSON."""
+        inputs = job_data.get("inputs", {})
+        if isinstance(inputs, str):
+            inputs = json.loads(inputs)
+        metadata = job_data.get("metadata", {})
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata) if metadata else {}
+
+        payload = {
+            "job_id": job_id,
+            "feature": job_data["feature"],
+            "inputs": inputs,
+            "model_preference": job_data.get("model_preference"),
+            "priority": job_data.get("priority", 0),
+            "timeout_seconds": job_data.get("timeout_seconds", 3600),
+            "metadata": metadata,
+            "user_id": job_data.get("user_id"),
+            "status": job_data.get("status", _status_to_str(JobStatus.QUEUED)),
+            "progress": job_data.get("progress", 0.0),
+            "assigned_model": job_data.get("model_id") or job_data.get("assigned_model"),
+            "created_at": job_data["created_at"],
+            "started_at": job_data.get("started_at"),
+            "completed_at": job_data.get("completed_at") or job_data.get("failed_at"),
+            "error": job_data.get("error"),
+            "retry_count": job_data.get("retry_count", 0),
+            "max_retries": job_data.get("max_retries", 4),
+            "last_retry_at": job_data.get("last_retry_at"),
+            "retry_reason": job_data.get("retry_reason"),
+        }
+        return JobRequest.from_dict(payload)
+
     async def get_jobs_by_status(self, status: JobStatus) -> list:
         """Get all jobs with specified status (compatibility method)"""
         if not self.redis:
@@ -338,18 +390,7 @@ class RedisJobQueue:
             try:
                 job_data = json.loads(job_data_str)
                 if job_data.get("status") == target_status:
-                    # Reconstruct JobRequest for compatibility
-                    job_request = JobRequest(
-                        feature=job_data["feature"],
-                        inputs=json.loads(job_data["inputs"]),
-                        model_preference=job_data.get("model_preference") or None,
-                        priority=job_data.get("priority", 0),
-                        metadata=json.loads(job_data.get("metadata", "{}")),
-                        user_id=job_data.get("user_id") or None,  # Restore user_id
-                    )
-                    job_request.job_id = job_id
-                    job_request.created_at = datetime.fromisoformat(job_data["created_at"])
-                    matching_jobs.append(job_request)
+                    matching_jobs.append(self._job_request_from_redis(job_id, job_data))
             except Exception as e:
                 logger.error(f"Error parsing job {job_id}: {e}")
                 continue

@@ -42,6 +42,10 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 - **Format Flexibility**: Support for multiple input/output formats (GLB, OBJ, FBX)
 - **RESTful API**: Clean, well-documented REST endpoints with OpenAPI specification
 
+### Avatar pipeline (OpenNexus Character Studio)
+
+Photo → TRELLIS mesh → **template.vrm** rig → optional VRM download + TripoSplat preview. Full design, blend-shape roadmap, and rig alignment notes: **[docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)** (wrap: [MESH_WRAP_ROADMAP.md](docs/MESH_WRAP_ROADMAP.md), Arc2Avatar: [ARC2AVATAR_TRACK.md](docs/ARC2AVATAR_TRACK.md)).
+
 ## Supported Models & Features
 The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
 ### Text/Image to 3D Mesh Generation
@@ -58,6 +62,12 @@ The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
 | Model | Input | Output | VRAM | Features |
 |-------|-------|--------|------|----------|
 | **[UniRig](https://github.com/VAST-AI-Research/UniRig)** | Mesh | Rigged Mesh | 9GB | Automatic skeleton generation |
+| **Template VRM** (`rig_mode: template`) | Mesh | Rigged GLB | — | Applies `template.vrm` skeleton to AIGC mesh (bones-only; see [docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)) |
+
+### Image to Gaussian Splat
+| Model | Input | Output | VRAM | Features |
+|-------|-------|--------|------|----------|
+| **[TripoSplat](https://github.com/VAST-AI-Research/TripoSplat)** | Image | `.ply` / splat | TBD | Spark.js preview in Character Studio |
 
 ### Mesh Segmentation 
 | Model | Input | Output | VRAM | Features |
@@ -142,11 +152,16 @@ The installation script will:
 - Install FastAPI and backend dependencies.
 
 3. **Download pre-trained models(optional, or download automatically)**:
+
+**Commercial use (Open3DStudio):** All production weights must allow commercial use. See **[docs/MODEL_LICENSES.md](docs/MODEL_LICENSES.md)** for the full audit. `download_models.sh` skips non-commercial models by default (PartField, PartPacker, PartUV, FastMesh). TRELLIS.2 uses **BiRefNet (MIT)** for background removal, not `briaai/RMBG-2.0` (personal use only).
+
 ```bash
 # on linux 
 chmod +x download_models.sh
-# download specific model(s)
-./scripts/download_models.sh -m partfield,trellis
+# download commercial-safe models (default)
+./scripts/download_models.sh -m trellis,trellis2,hunyuan21
+# research-only weights (NOT for commercial products):
+# ALLOW_NON_COMMERCIAL_MODELS=1 ./scripts/download_models.sh -m partfield,fastmesh
 # Verify all existing models
 ./scripts/download_models.sh -v
 # Show help

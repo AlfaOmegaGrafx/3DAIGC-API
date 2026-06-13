@@ -8,7 +8,7 @@ VoxHammer local mesh editing.
 import logging
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple, Union
 
 import numpy as np
 import trimesh
@@ -124,10 +124,24 @@ class MaskGenerator:
         return output_path
     
     @staticmethod
+    def _normalize_mask_params(
+        mask_type: str, params: Union[List[float], dict[str, Any]]
+    ) -> List[float]:
+        if isinstance(params, dict):
+            if mask_type.lower() in ["bbox", "box", "bounding_box"]:
+                params = params.get("dimensions", params.get("size"))
+            else:
+                params = params.get("radii", params.get("radius"))
+        if not isinstance(params, (list, tuple)) or len(params) != 3:
+            key = "dimensions" if mask_type.lower() in ["bbox", "box", "bounding_box"] else "radii"
+            raise ValueError(f"{key} must be [width, height, depth]" if key == "dimensions" else "radii must be [rx, ry, rz]")
+        return [float(v) for v in params]
+
+    @staticmethod
     def create_mask_from_params(
         mask_type: str,
         center: List[float],
-        params: List[float],
+        params: Union[List[float], dict[str, Any]],
         output_path: str,
         **kwargs,
     ) -> str:
@@ -137,13 +151,14 @@ class MaskGenerator:
         Args:
             mask_type: Type of mask ("bbox" or "ellipsoid")
             center: Center point [x, y, z]
-            params: Dimensions for bbox or radii for ellipsoid
+            params: Dimensions/radii list, or dict with ``dimensions`` / ``radii`` keys
             output_path: Path to save the mask GLB file
             **kwargs: Additional parameters for mask creation
         
         Returns:
             Path to created mask file
         """
+        params = MaskGenerator._normalize_mask_params(mask_type, params)
         if mask_type.lower() in ["bbox", "box", "bounding_box"]:
             return MaskGenerator.create_bbox_mask(
                 center=center,

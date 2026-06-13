@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 from typing import Dict, List, Optional
 
 try:
@@ -22,6 +23,7 @@ class GPUMonitor:
         )
         self.gpus = []
         self._has_gputil = GPUtil is not None
+        self._use_gputil_for_memory = False
 
         # For tracking mode: maintain allocated VRAM per GPU
         self.allocated_vram_per_gpu: Dict[int, int] = {}  # gpu_id -> allocated_vram_mb
@@ -30,30 +32,56 @@ class GPUMonitor:
         self._update_gpu_list()
         self._initialize_tracking()
 
+    @staticmethod
+    def _gputil_total_memory_mb(gpu) -> Optional[float]:
+        try:
+            v = float(gpu.memoryTotal)
+            if math.isnan(v) or v <= 0:
+                return None
+            return v
+        except (TypeError, ValueError):
+            return None
+
+    def _torch_gpu_dicts(self) -> List[Dict]:
+        gpus: List[Dict] = []
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            gpus.append(
+                {
+                    "id": i,
+                    "name": props.name,
+                    "memory_total": props.total_memory // (1024 * 1024),
+                }
+            )
+        return gpus
+
     def _update_gpu_list(self):
         """Update list of available GPUs"""
         if torch.cuda.is_available() and self._has_gputil and GPUtil:
             try:
-                self.gpus = GPUtil.getGPUs()
+                gputil_gpus = GPUtil.getGPUs()
+                if gputil_gpus and all(
+                    self._gputil_total_memory_mb(g) is not None for g in gputil_gpus
+                ):
+                    self.gpus = gputil_gpus
+                    self._use_gputil_for_memory = True
+                else:
+                    logger.warning(
+                        "GPUtil returned invalid GPU memory (NaN/0 on some devices); "
+                        "using PyTorch CUDA device properties for VRAM totals"
+                    )
+                    self.gpus = self._torch_gpu_dicts()
+                    self._use_gputil_for_memory = False
             except Exception as e:
                 logger.warning(f"Failed to get GPU list with GPUtil: {e}")
-                self.gpus = []
+                self.gpus = self._torch_gpu_dicts()
+                self._use_gputil_for_memory = False
         elif torch.cuda.is_available():
-            # Fallback to torch-only implementation
-            gpu_count = torch.cuda.device_count()
-            self.gpus = []
-            for i in range(gpu_count):
-                props = torch.cuda.get_device_properties(i)
-                self.gpus.append(
-                    {
-                        "id": i,
-                        "name": props.name,
-                        "memory_total": props.total_memory
-                        // (1024 * 1024),  # Convert to MB
-                    }
-                )
+            self.gpus = self._torch_gpu_dicts()
+            self._use_gputil_for_memory = False
         else:
             self.gpus = []
+            self._use_gputil_for_memory = False
             logger.warning("CUDA not available, running in CPU mode")
 
     def _initialize_tracking(self):
@@ -169,7 +197,7 @@ class GPUMonitor:
         self._update_gpu_list()
         status = []
 
-        if self._has_gputil and torch.cuda.is_available():
+        if self._has_gputil and self._use_gputil_for_memory and torch.cuda.is_available():
             # Use GPUtil for detailed stats
             for gpu in self.gpus:
                 gpu_status = {

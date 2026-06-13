@@ -945,6 +945,42 @@ def get_content_type_for_file(file_path: str) -> str:
     return mime_type or "application/octet-stream"
 
 
+@router.get("/jobs/{job_id}/world/{asset_path:path}", summary="Download world package asset")
+async def download_world_asset(job_id: str, asset_path: str, request: Request):
+    """Serve files from a completed image-to-world job directory (manifest, splat, props)."""
+    try:
+        scheduler = await get_scheduler(request)
+        job_status = await scheduler.get_job_status(job_id)
+        if job_status is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job_status.get("status") != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job is not completed yet. Current status: {job_status.get('status')}",
+            )
+        result = job_status.get("result", {}) or {}
+        world_dir = result.get("world_directory")
+        if not world_dir:
+            raise HTTPException(status_code=404, detail="Job has no world package")
+        base = Path(world_dir).resolve()
+        target = (base / asset_path).resolve()
+        if not str(target).startswith(str(base)):
+            raise HTTPException(status_code=400, detail="Invalid asset path")
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail=f"Asset not found: {asset_path}")
+        content_type = get_content_type_for_file(str(target))
+        return FileResponse(
+            path=str(target),
+            filename=target.name,
+            media_type=content_type,
+            headers={"X-Job-ID": job_id},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error serving world asset: {str(e)}") from e
+
+
 @router.get("/jobs/{job_id}/download", summary="Download job result")
 async def download_job_result(
     job_id: str,
@@ -953,6 +989,10 @@ async def download_job_result(
         None, description="Response format: 'file' (default) or 'base64'"
     ),
     filename: Optional[str] = Query(None, description="Custom filename for download"),
+    asset: Optional[str] = Query(
+        None,
+        description="Asset selector: 'manifest' for world.manifest.json (image-to-world jobs)",
+    ),
 ):
     """
     Download the result file of a completed job.
@@ -1000,12 +1040,21 @@ async def download_job_result(
 
         # Find the output file path - try multiple possible keys
         output_path = None
-        possible_keys = ["output_mesh_path", "mesh_path", "output_path", "file_path"]
+        if asset == "manifest":
+            output_path = result.get("world_manifest_path")
+        else:
+            possible_keys = [
+                "output_mesh_path",
+                "output_splat_path",
+                "mesh_path",
+                "output_path",
+                "file_path",
+            ]
 
-        for key in possible_keys:
-            if key in result and result[key]:
-                output_path = result[key]
-                break
+            for key in possible_keys:
+                if key in result and result[key]:
+                    output_path = result[key]
+                    break
 
         if not output_path:
             raise HTTPException(
@@ -1346,7 +1395,13 @@ async def get_job_result_info(job_id: str, request: Request):
 
         # Get file information
         output_path = None
-        possible_keys = ["output_mesh_path", "mesh_path", "output_path", "file_path"]
+        possible_keys = [
+            "output_mesh_path",
+            "output_splat_path",
+            "mesh_path",
+            "output_path",
+            "file_path",
+        ]
 
         for key in possible_keys:
             if key in result and result[key]:
@@ -1450,7 +1505,13 @@ async def delete_job_result(
 
         # Find and delete the output file
         output_path = None
-        possible_keys = ["output_mesh_path", "mesh_path", "output_path", "file_path"]
+        possible_keys = [
+            "output_mesh_path",
+            "output_splat_path",
+            "mesh_path",
+            "output_path",
+            "file_path",
+        ]
 
         for key in possible_keys:
             if key in result and result[key]:

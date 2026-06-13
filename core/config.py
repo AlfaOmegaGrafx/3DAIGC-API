@@ -1,7 +1,7 @@
 import logging
 import logging.config
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 from pydantic import field_validator
@@ -35,6 +35,7 @@ class ModelConfig(BaseSettings):
     max_workers: int = 1
     model_path: Optional[str] = None
     enabled: bool = True
+    init_params: Dict[str, Any] = {}
 
     model_config = SettingsConfigDict(protected_namespaces=("settings_",))
 

@@ -1,6 +1,11 @@
 #!/bin/bash
 
 # 3DAIGC Model Download Script
+#
+# COMMERCIAL USE (hard prerequisite for Open3DStudio):
+#   See docs/MODEL_LICENSES.md. By default this script skips weights that are
+#   research-only or personal-use. Set ALLOW_NON_COMMERCIAL_MODELS=1 to opt in.
+#
 # Usage: ./download_models.sh [OPTIONS]
 # 
 # Available models:
@@ -34,8 +39,37 @@ MODELS_TO_DOWNLOAD="all"
 VERIFY_ONLY=false
 FORCE_DOWNLOAD=false
 
+# Commercial-use policy (see docs/MODEL_LICENSES.md)
+COMMERCIAL_USE="${COMMERCIAL_USE:-1}"
+ALLOW_NON_COMMERCIAL_MODELS="${ALLOW_NON_COMMERCIAL_MODELS:-0}"
+# Upstream licenses prohibit commercial redistribution / SaaS use
+NON_COMMERCIAL_MODELS=("partfield" "partpacker" "partuv" "fastmesh")
+
 # Available models
-AVAILABLE_MODELS=("partfield" "hunyuan21" "trellis" "trellis-text" "trellis2" "p3sam" "unirig" "partpacker" "partuv" "fastmesh" "ultrashape" "misc" "all")
+AVAILABLE_MODELS=("partfield" "hunyuan21" "trellis" "trellis-text" "trellis2" "p3sam" "unirig" "partpacker" "partuv" "fastmesh" "ultrashape" "triposplat" "misc" "all")
+
+is_non_commercial_model() {
+    local name="$1"
+    for blocked in "${NON_COMMERCIAL_MODELS[@]}"; do
+        if [[ "$name" == "$blocked" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+gate_commercial_download() {
+    local name="$1"
+    if [[ "$ALLOW_NON_COMMERCIAL_MODELS" == "1" ]]; then
+        return 0
+    fi
+    if [[ "$COMMERCIAL_USE" == "1" ]] && is_non_commercial_model "$name"; then
+        print_warning "Skipping $name: non-commercial license (docs/MODEL_LICENSES.md)."
+        print_warning "Set ALLOW_NON_COMMERCIAL_MODELS=1 only for research builds."
+        return 1
+    fi
+    return 0
+}
 
 show_help() {
     cat << EOF
@@ -62,8 +96,14 @@ Available models:
     partuv        - PartUV model
     fastmesh      - FastMesh model
     ultrashape    - UltraShape model
+    triposplat    - TripoSplat (image → Gaussian splats, MIT)
     misc          - Miscellaneous models (RealESRGAN, DINOv2)
-    all           - Download all models
+    all           - Download commercial-safe models (excludes partfield, partpacker, partuv, fastmesh)
+
+Commercial policy:
+    By default, partfield, partpacker, partuv, and fastmesh are SKIPPED (non-commercial licenses).
+    Full audit: docs/MODEL_LICENSES.md
+    Research-only download: ALLOW_NON_COMMERCIAL_MODELS=1 ./scripts/download_models.sh -m partfield
 
 Examples:
     $0                                    # Download all models
@@ -314,12 +354,19 @@ download_trellis2() {
     
     mkdir -p "$model_dir"
     print_info "Downloading TRELLIS.2-4B model (image-based generation only)..."
-    if huggingface-cli download  microsoft/TRELLIS.2-4B --local-dir "$model_dir"; then
+    if huggingface-cli download microsoft/TRELLIS.2-4B --local-dir "$model_dir"; then
         print_success "TRELLIS.2-4B model downloaded successfully"
     else
         print_error "Failed to download TRELLIS.2-4B model"
         return 1
     fi
+
+    # DINOv3: official gated weights (requires hf auth + license acceptance).
+    print_info "Downloading official TRELLIS.2 DINOv3 (facebook/dinov3-vitl16-pretrain-lvd1689m)..."
+    huggingface-cli download facebook/dinov3-vitl16-pretrain-lvd1689m || print_warning "DINOv3 download failed (accept license at huggingface.co)"
+    # Background removal: ZhengPeng7/BiRefNet (MIT, commercial OK). Do NOT use briaai/RMBG-2.0 (non-commercial only).
+    print_info "Downloading TRELLIS.2 rembg model (ZhengPeng7/BiRefNet, MIT license)..."
+    huggingface-cli download ZhengPeng7/BiRefNet || print_warning "BiRefNet download failed"
 }
 
 # Function to download P3-SAM model
@@ -458,6 +505,38 @@ download_partuv() {
     fi
 }
 
+# Function to download TripoSplat (MIT — image → Gaussian splats)
+download_triposplat() {
+    print_info "========================================"
+    print_info "Downloading TripoSplat (VAST-AI)"
+    print_info "========================================"
+
+    local repo_dir="thirdparty/TripoSplat"
+    if [ ! -f "$repo_dir/triposplat.py" ]; then
+        print_info "Cloning TripoSplat source into $repo_dir"
+        mkdir -p thirdparty
+        git clone --depth 1 https://github.com/VAST-AI-Research/TripoSplat.git "$repo_dir" \
+            || { print_error "Failed to clone TripoSplat"; return 1; }
+    else
+        print_info "TripoSplat source already present at $repo_dir"
+    fi
+
+    local ckpt_marker="pretrained/TripoSplat/ckpts/diffusion_models/triposplat_fp16.safetensors"
+    if [ "$FORCE_DOWNLOAD" = false ] && verify_file "$ckpt_marker" 1000000; then
+        print_info "TripoSplat checkpoints already exist and verified"
+        return 0
+    fi
+
+    mkdir -p pretrained/TripoSplat
+    print_info "Downloading TripoSplat weights from Hugging Face (VAST-AI/TripoSplat)..."
+    if huggingface-cli download VAST-AI/TripoSplat --local-dir pretrained/TripoSplat/ckpts; then
+        print_success "TripoSplat weights downloaded to pretrained/TripoSplat/ckpts"
+    else
+        print_error "Failed to download TripoSplat weights"
+        return 1
+    fi
+}
+
 # Function to download UltraShape model
 download_ultrashape() {
     print_info "========================================"
@@ -471,20 +550,13 @@ download_ultrashape() {
     fi
 
     mkdir -p pretrained/UltraShape
-    print_info "Downloading UltraShape checkpoint..."
-    print_warning "UltraShape checkpoint download:"
-    print_info "Please download the checkpoint manually from the UltraShape repository"
-    print_info "and place it at: $checkpoint_path"
-    print_info "Repository: https://github.com/bytedance/UltraShape"
-    print_info "Or from HuggingFace (if available)"
-    
-    # Uncomment when HuggingFace model is available:
-    # if huggingface-cli download  bytedance/UltraShape --local-dir pretrained/UltraShape; then
-    #     print_success "UltraShape checkpoint downloaded successfully"
-    # else
-    #     print_error "Failed to download UltraShape checkpoint"
-    #     return 1
-    # fi
+    print_info "Downloading official UltraShape weights from Hugging Face (infinith/UltraShape)..."
+    if huggingface-cli download infinith/UltraShape --local-dir pretrained/UltraShape; then
+        print_success "UltraShape checkpoint downloaded successfully"
+    else
+        print_error "Failed to download UltraShape checkpoint"
+        return 1
+    fi
 }
 
 # Function to download miscellaneous models
@@ -601,6 +673,9 @@ IFS=',' read -ra MODELS_ARRAY <<< "$MODELS_TO_DOWNLOAD"
 
 # Download requested models
 for model in "${MODELS_ARRAY[@]}"; do
+    if [[ "$model" != "all" ]] && ! gate_commercial_download "$model"; then
+        continue
+    fi
     case "$model" in
         "partfield")
             download_partfield
@@ -641,11 +716,22 @@ for model in "${MODELS_ARRAY[@]}"; do
         "ultrashape")
             download_ultrashape
             ;;
+        "triposplat")
+            download_triposplat
+            ;;
         "misc")
             download_misc
             ;;
         "all")
-            download_partfield
+            # Commercial-safe set only unless ALLOW_NON_COMMERCIAL_MODELS=1
+            if [[ "$ALLOW_NON_COMMERCIAL_MODELS" == "1" ]]; then
+                download_partfield
+                download_partpacker
+                download_partuv
+                download_fastmesh
+            else
+                print_info "Commercial mode: skipping partfield, partpacker, partuv, fastmesh (see docs/MODEL_LICENSES.md)"
+            fi
             download_hunyuan2mini
             download_hunyuan21
             download_trellis
@@ -653,10 +739,8 @@ for model in "${MODELS_ARRAY[@]}"; do
             download_trellis2
             download_p3sam
             download_unirig
-            download_partpacker
-            download_partuv
-            download_fastmesh
             download_ultrashape
+            download_triposplat
             download_misc
             ;;
         *)

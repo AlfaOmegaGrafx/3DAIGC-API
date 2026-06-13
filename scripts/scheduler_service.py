@@ -41,11 +41,17 @@ scheduler_instance = None
 redis_queue_instance = None
 
 
+shutdown_requested = False
+
+
 async def run_scheduler_service(redis_url: str):
     """Run the scheduler service"""
-    global scheduler_instance, redis_queue_instance
+    global scheduler_instance, redis_queue_instance, shutdown_requested
 
     try:
+        from core.utils.gpu_env import apply_local_gpu_env
+
+        apply_local_gpu_env()
         # Load settings
         settings = get_settings()
         setup_logging(settings.logging)
@@ -113,7 +119,7 @@ async def run_scheduler_service(redis_url: str):
         logger.info("=" * 60)
 
         # Keep running until interrupted
-        while True:
+        while not shutdown_requested:
             await asyncio.sleep(1)
 
             # Periodically log queue status
@@ -151,9 +157,10 @@ async def run_scheduler_service(redis_url: str):
 
 
 def signal_handler(signum, frame):
-    """Handle shutdown signals gracefully"""
+    """Request graceful shutdown; the main loop exits and ``finally`` drains workers."""
+    global shutdown_requested
     logger.info(f"\nReceived signal {signum}")
-    sys.exit(0)
+    shutdown_requested = True
 
 
 def main():

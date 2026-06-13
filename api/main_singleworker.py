@@ -44,11 +44,18 @@ scheduler = None
 
 # Configure CORS
 def configure_cors(app: FastAPI, settings):
-    """Configure CORS middleware"""
+    """Configure CORS middleware.
+
+    Wildcard origins cannot be combined with credentialed CORS (browser spec).
+    This API uses Bearer tokens in Authorization, not cookies, so credentials
+    are unnecessary and ``["*"]`` works for browser clients (e.g. Vite dev).
+    """
+    origins = settings.security.cors_origins
+    allow_credentials = origins != ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.security.cors_origins,
-        allow_credentials=True,
+        allow_origins=origins,
+        allow_credentials=allow_credentials,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )

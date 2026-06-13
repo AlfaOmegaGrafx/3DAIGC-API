@@ -76,17 +76,31 @@ class Hunyuan3DV21ImageToMeshAdapterCommon(ImageToMeshModel):
         self.load_shapegen = True
         self.load_painting = True
 
-        self.model_path = Path(model_path)
+        self.model_path = self._resolve_weights_path(Path(model_path))
         # Add Hunyuan3D to Python path
         if str(self.hunyuan3d_root) not in sys.path:
             sys.path.insert(0, str(self.hunyuan3d_root))
         if str(self.hunyuan3d_root / "hy3dshape") not in sys.path:
             sys.path.insert(0, str(self.hunyuan3d_root / "hy3dshape"))
 
+    def _resolve_weights_path(self, model_path: Path) -> Path:
+        """HF weights live under pretrained/; thirdparty/ is code-only."""
+        if (model_path / "hunyuan3d-dit-v2-1").is_dir():
+            return model_path.resolve()
+        fallback = Path(os.getcwd()) / "pretrained" / "tencent" / "Hunyuan3D-2.1"
+        if fallback.is_dir():
+            return fallback.resolve()
+        return model_path.resolve()
+
     def _load_model(self):
         """Load Hunyuan3D 2.1 pipelines based on configuration."""
         try:
             logger.info(f"Loading Hunyuan3D 2.1 models from {self.model_path}")
+
+            if self.load_painting:
+                from utils.hunyuan_mesh_utils_shim import install_hunyuan_mesh_utils_shim
+
+                install_hunyuan_mesh_utils_shim()
 
             # Apply torchvision fix if available
             try:
