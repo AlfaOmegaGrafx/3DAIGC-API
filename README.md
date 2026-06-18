@@ -784,5 +784,16 @@ For full documentation, see [User Management Guide](./docs/user_management.md).
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 Notice that each algorithm **HAS ITS OWN LICENSE**, please check them carefully if needed.
 
+## Legal & Trademark Information
+
+### Software Licensing
+The underlying source code of 3DAIGC-API is licensed under the [Apache License 2.0](LICENSE).
+
+### Trademark & Brand Asset Reservation
+The names **"Space-Time"**, **"OpenNexus3DStudio"**, the "Space-Time" orbital clock logo artwork, and all associated apparel designs, product names, graphics, and phygital concept assets are proprietary intellectual property.
+
+* **No Trademark License:** The open-source license applied to the source code **does not** grant any rights, implied or explicit, to use the "Space-Time" brand name, logo, or trade dress for commercial or non-commercial redistributions.
+* **Modification Requirement:** If you fork this repository or modify the code to distribute your own software or services, you **must** remove all "Space-Time" branding, logos, and references, and rebrand your version entirely under a unique name.
+
 ##  Acknowledgment
 Special thanks to the authors and contributors of all integrated models and the open-source community.
