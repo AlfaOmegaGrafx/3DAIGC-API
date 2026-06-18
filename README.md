@@ -3,17 +3,31 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/docker/v/fishwowater/3daigc-api?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/fishwowater/3daigc-api)
-[![Open3DStudio](https://img.shields.io/badge/YouTube-Open3DStudio-red?&logo=youtube)](https://youtu.be/LNteOF3XmmI)
+[![OpenNexus3DStudio](https://img.shields.io/badge/Frontend-OpenNexus3DStudio-blue)](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio)
+[![YouTube Demo](https://img.shields.io/badge/YouTube-Open3DStudio-red?&logo=youtube)](https://youtu.be/LNteOF3XmmI)
 
-A **self-hosted, comprehensive and scalable** FastAPI backend server framework for 3D generative AI models, with all of them ported to API-ready inference services
+A **self-hosted, comprehensive and scalable** FastAPI backend server framework for 3D generative AI models, with all of them ported to API-ready inference services.
 
-The system is powered with GPU resource management, concurrent and VRAM-aware GPU scheduling. It can be used together with **Open3DStudio, an open-source replicate of TripoStudio**.
+The system is powered with GPU resource management, concurrent and VRAM-aware GPU scheduling. It is designed to run with **[OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio)** — the open-source 3D AIGC + VRM avatar client (evolved from Open3DStudio / TripoStudio-style workflows).
+
+| Repo | Role |
+|------|------|
+| [AlfaOmegaGrafx/3DAIGC-API](https://github.com/AlfaOmegaGrafx/3DAIGC-API) | This backend (GPU inference, job queue) |
+| [AlfaOmegaGrafx/OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio) | Frontend (Vite, WebXR, VRM viewport) |
+| [FishWoWater/3DAIGC-API](https://github.com/FishWoWater/3DAIGC-API) | Upstream reference fork |
+
+**Typical dev topology:** API on **DGX Spark** (`:7842`) + **OpenNexus3DStudio** dev server on a Surface PC (`VITE_API_ENDPOINT=/__dev_dgx_proxy` → DGX). See [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md).
 
 ## CHANGELOG
-#### Updates 06.13 (OpenNexus Character Studio / local GPU)
+#### Updates 06.17 (OpenNexus3DStudio integration)
+* **Naming** — docs and README aligned with **OpenNexus3DStudio** (replaces legacy "Character Studio" / mixed Open3DStudio client labels in integration sections).
+* **Avatar rig contract** — [API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md) documents glTF Y-up / -Z forward, Blender template rig path, and client validation (`aigcRigContract.js`). Standard **`.vrm` upload** in OpenNexus3DStudio does not run AIGC mesh–skeleton alignment; template-rig GLBs from the API do.
+* **Frontend ↔ API** — OpenNexus3DStudio loads task results via `fromAigc` + `preserveExportedOrientation`; uploaded VRM uses `vrmLoader` only. Cross-repo contract: `OpenNexus3DStudio/docs/api/api.md` ↔ [api_documentation.md](docs/api_documentation.md).
+
+#### Updates 06.13 (OpenNexus3DStudio / local GPU)
 * **Template VRM rig** — `rig_mode: template` on `POST /api/v1/auto-rigging/generate-rig` applies `assets/example_autorig/template.vrm` skeleton to AIGC meshes (Blender pipeline in `scripts/blender/`).
 * **Image → World Package** — `POST /api/v1/world-generation/image-to-world` produces splat environment + optional mesh props; download via `GET /jobs/{id}/download?asset=manifest`.
-* **Image → Gaussian Splat** — `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) for Spark.js preview in Character Studio.
+* **Image → Gaussian Splat** — `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) for Spark.js preview in OpenNexus3DStudio.
 * **Local DGX deployment** — Redis + scheduler + API scripts (`scripts/start_services_detached.sh`, `scripts/env_local_gpu.sh`). See **[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)**.
 * **Commercial model audit** — `docs/MODEL_LICENSES.md`; non-commercial routes disabled by default in `config/models.yaml`.
 * **Docs** — [AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md), [API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md), updated [api_documentation.md](docs/api_documentation.md).
@@ -38,8 +52,10 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 ## System Architecture
 ![arch](./assets/system_arch.png)
 
-## Use Case (with Open3DStudio)
-![Open3DStudio Demo](./assets/open3dstudio_v1.0_demo_41m.gif)
+## Use Case (with OpenNexus3DStudio)
+![OpenNexus3DStudio Demo](./assets/open3dstudio_v1.0_demo_41m.gif)
+
+> Demo GIF filename is historical (`open3dstudio_*`); the client is **[OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio)**.
 
 
 ### Key Features
@@ -50,9 +66,11 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 - **Format Flexibility**: Support for multiple input/output formats (GLB, OBJ, FBX)
 - **RESTful API**: Clean, well-documented REST endpoints with OpenAPI specification
 
-### Avatar pipeline (OpenNexus Character Studio)
+### Avatar pipeline (OpenNexus3DStudio)
 
 Photo → TRELLIS mesh → **template.vrm** rig → optional VRM download + TripoSplat preview. Full design, blend-shape roadmap, and rig alignment notes: **[docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)** (wrap: [MESH_WRAP_ROADMAP.md](docs/MESH_WRAP_ROADMAP.md), Arc2Avatar: [ARC2AVATAR_TRACK.md](docs/ARC2AVATAR_TRACK.md)).
+
+Client repo: [OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio) — task UI, viewport, VRM export. API contract: [API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md).
 
 ## Supported Models & Features
 The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
@@ -75,7 +93,7 @@ The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
 ### Image to Gaussian Splat
 | Model | Input | Output | VRAM | Features |
 |-------|-------|--------|------|----------|
-| **[TripoSplat](https://github.com/VAST-AI-Research/TripoSplat)** | Image | `.ply` / splat | ~16GB | Spark.js preview in Character Studio |
+| **[TripoSplat](https://github.com/VAST-AI-Research/TripoSplat)** | Image | `.ply` / splat | ~16GB | Spark.js preview in OpenNexus3DStudio |
 
 ### Image to World Package
 | Model | Input | Output | VRAM | Features |
@@ -116,7 +134,7 @@ The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
 ### Runpod (Recommended)
 Use the cloud compute provided by [RunPod](https://www.runpod.io) to deploy your own backend with **a single click**. I have provided the runpod template [here](https://console.runpod.io/deploy?template=bb0j8jta3y&ref=djra5vej)
 
-How-To: Select the template --> Select a machine based on your use-case --> Deploy On-Demand. After runpod setups the template, you can see a http service marked as **ready**. Then copy the url and setup in the Open3DStudio's settings tab.
+How-To: Select the template --> Select a machine based on your use-case --> Deploy On-Demand. After runpod setups the template, you can see a http service marked as **ready**. Then copy the url and set it in **OpenNexus3DStudio** Settings → API endpoint.
 
 ![runpod_demo1](./assets/runpod_demo1.png)
 ![runpod_demo2](./assets/runpod_demo2.png)
@@ -166,7 +184,7 @@ The installation script will:
 
 3. **Download pre-trained models(optional, or download automatically)**:
 
-**Commercial use (Open3DStudio):** All production weights must allow commercial use. See **[docs/MODEL_LICENSES.md](docs/MODEL_LICENSES.md)** for the full audit. `download_models.sh` skips non-commercial models by default (PartField, PartPacker, PartUV, FastMesh). TRELLIS.2 uses **BiRefNet (MIT)** for background removal, not `briaai/RMBG-2.0` (personal use only).
+**Commercial use (OpenNexus3DStudio):** All production weights must allow commercial use. See **[docs/MODEL_LICENSES.md](docs/MODEL_LICENSES.md)** for the full audit. `download_models.sh` skips non-commercial models by default (PartField, PartPacker, PartUV, FastMesh). TRELLIS.2 uses **BiRefNet (MIT)** for background removal, not `briaai/RMBG-2.0` (personal use only).
 
 ```bash
 # on linux 
@@ -208,7 +226,7 @@ bash scripts/start_services_detached.sh
 bash scripts/run_server.sh
 ```
 
-See **[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)** for venv setup, model downloads, and troubleshooting.
+See [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md) for venv setup, model downloads, OpenNexus3DStudio proxy settings, and troubleshooting.
 
 The server will be available at `http://localhost:7842` by default.
 Once the server is running, visit:
@@ -385,7 +403,7 @@ curl "http://localhost:7842/api/v1/system/jobs/{job_id}/download" \
   -o "rigged_character.fbx"
 ```
 
-**Template VRM rig** (OpenNexus avatar pipeline — bones-only on AIGC mesh):
+**Template VRM rig** (OpenNexus3DStudio avatar-from-image pipeline — bones-only on AIGC mesh):
 
 ```bash
 curl -X POST "http://localhost:7842/api/v1/auto-rigging/generate-rig" \
@@ -420,7 +438,7 @@ curl -X POST "http://localhost:7842/api/v1/world-generation/image-to-world" \
     "model_preference": "opennexus_image_to_world"
   }'
 
-# 3. Poll job, then fetch manifest (Character Studio loads this URL)
+# 3. Poll job, then fetch manifest (OpenNexus3DStudio loads this URL)
 curl "http://localhost:7842/api/v1/system/jobs/{job_id}/download?asset=manifest"
 
 # 4. World assets under /api/v1/system/jobs/{job_id}/world/...
@@ -660,11 +678,12 @@ For more examples, check out [API doc](./docs/api_documentation.md) and the [doc
 | Doc | Description |
 |-----|-------------|
 | [docs/api_documentation.md](docs/api_documentation.md) | Full REST API reference |
-| [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md) | Redis, venv, start/stop on DGX or bare metal |
+| [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md) | Redis, venv, DGX + OpenNexus3DStudio dev proxy |
 | [docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md) | Photo → mesh → template rig → VRM export |
 | [docs/API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md) | Rig validation contract for skinned GLB |
 | [docs/MODEL_LICENSES.md](docs/MODEL_LICENSES.md) | Commercial-use model audit |
 | [docs/user_management.md](docs/user_management.md) | Optional auth and job isolation |
+| [OpenNexus3DStudio API mirror](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio/blob/main/docs/api/api.md) | Client-side endpoint docs (keep in sync) |
 
 ### Testing
 Directly test the adapters (no need to start up the server)

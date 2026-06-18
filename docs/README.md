@@ -9,12 +9,14 @@
 - **[LOCAL_DEPLOYMENT.md](LOCAL_DEPLOYMENT.md)** — Redis, venv, start/stop on DGX or bare metal
 - **[user_management.md](user_management.md)** — Optional authentication and job isolation
 
-## OpenNexus / Character Studio
+## OpenNexus3DStudio
 
 - **[AVATAR_PIPELINE.md](AVATAR_PIPELINE.md)** — Photo → mesh → template VRM rig → VRM export
 - **[API_AVATAR_RIG_CONTRACT.md](API_AVATAR_RIG_CONTRACT.md)** — Rig validation contract for skinned GLB exports
 - **[MESH_WRAP_ROADMAP.md](MESH_WRAP_ROADMAP.md)** — Blend-shape transfer via mesh wrap (roadmap)
 - **[ARC2AVATAR_TRACK.md](ARC2AVATAR_TRACK.md)** — Arc2Avatar Gaussian head integration (stub)
+
+Frontend: [github.com/AlfaOmegaGrafx/OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio)
 
 ## Models & licensing
 

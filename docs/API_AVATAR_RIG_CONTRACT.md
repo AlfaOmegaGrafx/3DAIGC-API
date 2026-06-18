@@ -1,11 +1,11 @@
 # API avatar rig export contract
 
-Character Studio and the DGX API share this contract for **skinned humanoid GLB** exports
+OpenNexus3DStudio and the DGX API share this contract for **skinned humanoid GLB** exports
 (template VRM rig, UniRig merge, etc.). The client validates on load and logs
 `[API-Contract] PASS|FAIL`; the API **must** validate on export and fail the job when
 **critical** codes are present.
 
-Keep this file in sync with `OpenNexus3DStudio/CharacterStudio/docs/API_AVATAR_RIG_CONTRACT.md`.
+Keep this file in sync with `OpenNexus3DStudio/docs/api/API_AVATAR_RIG_CONTRACT.md` (or the mirrored path under `docs/` in that repo).
 
 ## Coordinate system (glTF / three.js)
 
@@ -46,7 +46,7 @@ Client-only structural codes: `no_model_root`, `empty_mesh_bounds`, `empty_bone_
 
 | Side | File |
 |------|------|
-| Client validate + log | `CharacterStudio/src/library/aigcRigContract.js` |
+| Client validate + log | `OpenNexus3DStudio/src/library/aigcRigContract.js` |
 | Client rig repair | **disabled** for `fromAigc` (`rigBoneUtils.normalizeRiggedModelTransforms`) |
 | API export gate | `core/utils/aigc_rig_contract.py` → `validate_aigc_rigged_glb()` |
 | Blender template rig | `scripts/blender/apply_humanoid_template_rig.py` |
@@ -73,7 +73,7 @@ Remote log grep: `[API-Contract]`
 
 ## Re-test
 
-1. Hard reload Character Studio  
+1. Hard reload OpenNexus3DStudio  
 2. Run **Avatar from Image** (new job)  
 3. Grep remote log for `[API-Contract] PASS`  
 4. Upright mesh + skeleton in Solid and Skeleton modes  

@@ -1,6 +1,6 @@
 # Local GPU Deployment (DGX / bare metal)
 
-Run the API + job scheduler on a local machine with NVIDIA GPU(s). Used with **OpenNexus Character Studio** on a separate dev PC (`VITE_API_ENDPOINT` → DGX `:7842`).
+Run the API + job scheduler on a local machine with NVIDIA GPU(s). Used with **[OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio)** on a separate dev PC (`VITE_API_ENDPOINT` → DGX `:7842`).
 
 ## Prerequisites
 
@@ -96,7 +96,7 @@ Environment overrides (common):
 | Template rig fails | Verify `BLENDER_BIN`, `assets/example_autorig/template.vrm` |
 | VRAM OOM | Disable unused models in `config/models.yaml` |
 
-## Character Studio integration
+## OpenNexus3DStudio integration
 
 On the dev PC (Surface):
 
