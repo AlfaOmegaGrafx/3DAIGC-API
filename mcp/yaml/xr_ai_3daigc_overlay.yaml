@@ -19,6 +19,9 @@ daigc_mcp_url: http://localhost:8260
 # 3DAIGC-API REST base (for operator reference; MCP adapter reads DAIGC_API_BASE_URL env)
 daigc_api_base_url: http://localhost:7842
 
+# OpenNexus3DStudio on Surface PC (Galaxy XR opens in headset browser for job handoff).
+opennexus_studio_url: https://100.94.108.18:3000
+
 # Suggested system-prompt addition for voice agents:
 # - Use upload_image then image_to_textured_mesh for "make a 3D model of this"
 # - Always wait_for_job after submit tools (jobs take minutes on Spark)

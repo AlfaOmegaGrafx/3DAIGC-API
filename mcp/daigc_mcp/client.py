@@ -181,8 +181,13 @@ class DaigcClient:
 
     async def resolve_default_model(self, feature: str) -> str | None:
         payload = await self.list_models(feature)
-        models = payload.get("available_models") or {}
-        entries = models.get(feature) or []
+        # Filtered query returns {"feature": ..., "models": [...]}
+        if isinstance(payload.get("models"), list):
+            entries = payload["models"]
+        else:
+            # Unfiltered query returns {"available_models": {feature: [...]}}
+            models = payload.get("available_models") or {}
+            entries = models.get(feature) or []
         return entries[0] if entries else None
 
     @staticmethod

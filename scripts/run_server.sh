@@ -74,6 +74,14 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 # shellcheck source=scripts/env_local_gpu.sh
 source "$(dirname "$0")/env_local_gpu.sh"
 
+# MSF / RP1 spatial fabric (MSF_PUBLIC_BASE_URL, etc.)
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env"
+  set +a
+fi
+
 # Essential configuration parameters
 export P3D_USER_AUTH_ENABLED="$USER_AUTH_ENABLED"
 export P3D_DEBUG="$DEBUG_MODE"

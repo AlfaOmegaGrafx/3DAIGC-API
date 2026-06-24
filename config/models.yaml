@@ -70,6 +70,16 @@ image_to_textured_mesh:
     enabled: true
     max_workers: 1
 
+  pixal3d_image_to_textured_mesh:
+    vram_requirement: 20480  # MB — pixel-aligned PBR; use low_vram on 16GB GPUs
+    supported_inputs: ["image"]
+    supported_outputs: ["glb"]
+    model_path: "thirdparty/Pixal3D"
+    enabled: true
+    max_workers: 1
+    init_params:
+      default_low_vram: true
+
   hunyuan3dv21_image_to_textured_mesh:
     vram_requirement: 19456  # MB
     supported_inputs: ["image"]
@@ -121,6 +131,20 @@ image_to_splat:
     supported_inputs: ["image"]
     supported_outputs: ["ply", "splat"]
     model_path: "thirdparty/TripoSplat"
+    enabled: true
+    max_workers: 1
+  colmap_3dgs_reconstruct:
+    vram_requirement: 8192  # MB — COLMAP CPU + PLY export; optional gsplat refine later
+    supported_inputs: ["image"]
+    supported_outputs: ["ply", "splat"]
+    model_path: "outputs/splats"
+    enabled: true
+    max_workers: 1
+  worldmirror2_reconstruct:
+    vram_requirement: 16384  # MB — WorldMirror 2.0 feed-forward 3DGS
+    supported_inputs: ["image"]
+    supported_outputs: ["ply", "splat"]
+    model_path: "thirdparty/HY-World-2.0"
     enabled: true
     max_workers: 1
 
