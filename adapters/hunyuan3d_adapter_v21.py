@@ -66,6 +66,15 @@ class Hunyuan3DV21ImageToMeshAdapterCommon(ImageToMeshModel):
         )
 
         self.hunyuan3d_root = Path(hunyuan3d_root)
+        if not (self.hunyuan3d_root / "hy3dshape" / "hy3dshape").is_dir():
+            fallback_root = Path(os.getcwd()) / "thirdparty" / "Hunyuan3D-2.1"
+            if (fallback_root / "hy3dshape" / "hy3dshape").is_dir():
+                logger.warning(
+                    "Hunyuan3D code root %s has no hy3dshape package; using %s",
+                    self.hunyuan3d_root,
+                    fallback_root,
+                )
+                self.hunyuan3d_root = fallback_root
         self.pipeline_shapegen = None
         self.paint_pipeline = None
         self.bg_remover = None

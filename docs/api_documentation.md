@@ -122,17 +122,36 @@ All API responses follow a consistent format:
 {
   "features": [
     {
-      "name": "text_to_raw_mesh",
+      "name": "text_to_textured_mesh",
       "model_count": 1,
-      "models": ["trellis_text_to_raw_mesh"]
+      "models": ["trellis_text_to_textured_mesh"]
     },
     {
-      "name": "mesh_segmentation",
-      "model_count": 1,
-      "models": ["partfield_mesh_segmentation"]
+      "name": "image_to_textured_mesh",
+      "model_count": 4,
+      "models": [
+        "trellis2_image_to_textured_mesh",
+        "pixal3d_image_to_textured_mesh",
+        "hunyuan3dv21_image_to_textured_mesh",
+        "trellis_image_to_textured_mesh"
+      ]
+    },
+    {
+      "name": "image_to_splat",
+      "model_count": 3,
+      "models": [
+        "triposplat_image_to_splat",
+        "worldmirror2_reconstruct",
+        "colmap_3dgs_reconstruct"
+      ]
+    },
+    {
+      "name": "auto_rig",
+      "model_count": 2,
+      "models": ["skintokens_auto_rig", "unirig_auto_rig"]
     }
   ],
-  "total_features": 2
+  "total_features": 4
 }
 ```
 
@@ -147,13 +166,38 @@ All API responses follow a consistent format:
 ```json
 {
   "available_models": {
-    "text_to_raw_mesh": ["trellis_text_to_raw_mesh"],
-    "image_to_raw_mesh": ["trellis_image_to_raw_mesh"],
-    "mesh_segmentation": ["partfield_mesh_segmentation"],
-    "auto_rig": ["unirig_auto_rig", "skintokens_auto_rig"]
+    "text_to_textured_mesh": ["trellis_text_to_textured_mesh"],
+    "text_mesh_painting": ["trellis_text_mesh_painting"],
+    "image_to_raw_mesh": [
+      "hunyuan3dv21_image_to_raw_mesh",
+      "ultrashape_image_to_raw_mesh"
+    ],
+    "image_to_textured_mesh": [
+      "trellis2_image_to_textured_mesh",
+      "pixal3d_image_to_textured_mesh",
+      "hunyuan3dv21_image_to_textured_mesh",
+      "trellis_image_to_textured_mesh"
+    ],
+    "image_mesh_painting": [
+      "trellis2_image_mesh_painting",
+      "hunyuan3dv21_image_mesh_painting",
+      "trellis_image_mesh_painting"
+    ],
+    "image_to_world": ["opennexus_image_to_world"],
+    "image_to_splat": [
+      "triposplat_image_to_splat",
+      "worldmirror2_reconstruct",
+      "colmap_3dgs_reconstruct"
+    ],
+    "mesh_segmentation": ["p3sam_mesh_segmentation"],
+    "auto_rig": ["skintokens_auto_rig", "unirig_auto_rig"],
+    "mesh_retopology": ["instant_meshes_retopology"],
+    "uv_unwrapping": ["xatlas_uv_unwrapping"],
+    "text_mesh_editing": ["voxhammer_text_mesh_editing"],
+    "image_mesh_editing": ["voxhammer_image_mesh_editing"]
   },
-  "total_features": 4,
-  "total_models": 4
+  "total_features": 13,
+  "total_models": 22
 }
 ```
 
@@ -199,7 +243,7 @@ All API responses follow a consistent format:
 ### Get Job Status
 - **URL**: `/api/v1/system/jobs/{job_id}`
 - **Method**: `GET`
-- **Description**: Get status of a specific job with visitable URLs for files
+- **Description**: Get status of a specific job with visitable URLs for files. Job timestamps use **US Eastern** (`America/New_York`, EST/EDT). Each timestamp field has a companion `*_date` in **mm-dd-yyyy** format (e.g. `created_at_date`). Responses include `"timezone": "America/New_York"`.
 - **Authentication**: None required
 - **Path Parameters**:
   - `job_id`: Unique job identifier
@@ -208,8 +252,11 @@ All API responses follow a consistent format:
 {
   "job_id": "job_123456",
   "status": "completed",
-  "created_at": "2024-01-01T00:00:00.000Z",
-  "completed_at": "2024-01-01T00:05:00.000Z",
+  "created_at": "2024-06-15T08:00:00-04:00",
+  "created_at_date": "06-15-2024",
+  "completed_at": "2024-06-15T08:05:00-04:00",
+  "completed_at_date": "06-15-2024",
+  "timezone": "America/New_York",
   "processing_time": 300.5,
   "result": {
     "output_mesh_path": "/outputs/meshes/mesh_123456.glb",
@@ -261,8 +308,8 @@ All API responses follow a consistent format:
   - `offset` (optional): Number of jobs to skip for pagination (default: 0)
   - `status` (optional): Filter by job status (`queued`, `processing`, `completed`, `failed`)
   - `feature` (optional): Filter by feature type (e.g., `text_to_textured_mesh`)
-  - `start_date` (optional): Filter jobs after this date (ISO format: `2024-01-01T00:00:00Z`)
-  - `end_date` (optional): Filter jobs before this date (ISO format: `2024-01-01T23:59:59Z`)
+  - `start_date` (optional): Filter jobs after this date (ISO 8601, US Eastern — e.g. `2024-06-15T00:00:00-04:00`)
+  - `end_date` (optional): Filter jobs before this date (ISO 8601, US Eastern)
 - **Response**:
 ```json
 {
@@ -271,8 +318,11 @@ All API responses follow a consistent format:
       "job_id": "job_123456",
       "status": "completed",
       "feature": "text_to_textured_mesh",
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "completed_at": "2024-01-01T00:05:00.000Z",
+      "created_at": "2024-06-15T08:00:00-04:00",
+      "created_at_date": "06-15-2024",
+      "completed_at": "2024-06-15T08:05:00-04:00",
+      "completed_at_date": "06-15-2024",
+      "timezone": "America/New_York",
       "model_preference": "trellis_text_to_textured_mesh",
       "processing_time": 300.5,
       "output_mesh_path": "/outputs/mesh_123456.glb",
@@ -821,6 +871,17 @@ curl -X GET "http://localhost:7842/api/v1/system/jobs/{job_id}" \
 }
 ```
 
+## Image Tools Endpoints
+
+### Remove Background (BiRefNet — XR-AI camera prep)
+- **URL**: `/api/v1/image-tools/remove-background`
+- **Method**: `POST`
+- **Content-Type**: `multipart/form-data`
+- **Description**: Internal preprocess for **XR-AI voice camera mesh** (BiRefNet matte before `image_to_textured_mesh`). Not exposed as a Task Manager action — mesh pipelines also run background removal automatically.
+- **Form fields**:
+  - `file` (required): JPEG/PNG/WebP image
+  - `erode_radius` (optional, 0–8): Shrink matte edge after removal (default `1`)
+
 ## Mesh Segmentation Endpoints
 
 ### Segment Mesh
@@ -914,7 +975,7 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVAT
 ### Humanoid Template Manifest
 - **URL**: `/api/v1/auto-rigging/humanoid-templates/{template_id}/manifest`
 - **Method**: `GET`
-- **Description**: Metadata for `template.vrm` (bone counts, blend-shape preset names) used by Character Studio VRM export
+- **Description**: Metadata for `template.vrm` (bone counts, blend-shape preset names) used by OpenNexus3DStudio VRM export
 - **Authentication**: None required
 - **Response** (abbreviated):
 ```json
@@ -968,7 +1029,7 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVAT
 
 ## Splat Generation Endpoints
 
-Gaussian splat preview (TripoSplat). Consumed by Character Studio via Spark.js.
+Gaussian splat preview (TripoSplat). Consumed by OpenNexus3DStudio via Spark.js.
 
 ### Image to Splat
 - **URL**: `/api/v1/splat-generation/image-to-splat`
@@ -998,7 +1059,7 @@ See also [AVATAR_PIPELINE.md](AVATAR_PIPELINE.md) for combining splats with avat
 
 ## World Generation Endpoints
 
-Explorable world packages for Character Studio / Galaxy XR: Gaussian splat environment plus optional mesh props.
+Explorable world packages for OpenNexus3DStudio / Galaxy XR: Gaussian splat environment plus optional mesh props.
 
 ### Image to World
 - **URL**: `/api/v1/world-generation/image-to-world`
@@ -1036,7 +1097,7 @@ After job `status` is `completed`:
 - **Method**: `GET`
 - **Description**: Serve files from the completed world package (e.g. `world/environment.ply`, prop GLBs)
 
-Character Studio loads the manifest URL first, then resolves relative paths against `world_base_url` from the job result.
+OpenNexus3DStudio loads the manifest URL first, then resolves relative paths against `world_base_url` from the job result.
 
 See [LOCAL_DEPLOYMENT.md](LOCAL_DEPLOYMENT.md) for Redis/API setup and [AVATAR_PIPELINE.md](AVATAR_PIPELINE.md) for the full client workflow.
 
@@ -1765,20 +1826,66 @@ curl "http://localhost:7842/api/v1/system/jobs/history?start_date=2024-01-01T00:
 
 ---
 
+## Spatial Fabric (RP1 / OMB)
+
+OMB-compliant GLB publishing to the MSF Map Service object library. Set `MSF_PUBLIC_BASE_URL`, `MSF_FABRIC_MSF_URL`, `MSF_OBJECTS_DIR`, and `RP1_COMPANY_ID` in the API environment.
+
+### Get Spatial Fabric Config
+- **URL**: `/api/v1/spatial-fabric/config`
+- **Method**: `GET`
+- **Description**: Returns whether integration is enabled and public MSF/RP1 URLs.
+
+### Resolve Job Asset
+- **URL**: `/api/v1/spatial-fabric/assets/{job_id}`
+- **Method**: `GET`
+- **Description**: Download URL and OMB tier analysis for a completed mesh job.
+
+### Validate GLB (OMB tiers)
+- **URL**: `/api/v1/spatial-fabric/validate-glb`
+- **Method**: `POST` (`multipart/form-data`, field `file`)
+- **Query**: `use_pbr` (bool, default `true`)
+
+### Publish Job to MSF
+- **URL**: `/api/v1/spatial-fabric/publish`
+- **Method**: `POST` (JSON: `job_id`, optional `asset_name`, `use_pbr`)
+
+### Publish GLB Upload
+- **URL**: `/api/v1/spatial-fabric/publish-glb`
+- **Method**: `POST` (`multipart/form-data`)
+- **Query**: optional `asset_name`, `use_pbr`
+
+---
+
 ## Model Preferences
 
 ### Available Models by Feature
 
+Enabled models are defined in `config/models.yaml`. Use `/api/v1/system/models` for the live list on a running server.
+
 | Feature | Model ID | Description |
 |---------|----------|-------------|
-| Text to Raw Mesh | `trellis_text_to_raw_mesh` | TRELLIS model for text-to-mesh |
-| Text to Textured Mesh | `trellis_text_to_textured_mesh` | TRELLIS model for textured mesh |
-| Image to Raw Mesh | `trellis_image_to_raw_mesh` | TRELLIS model for image-to-mesh |
-| Image to Textured Mesh | `trellis_image_to_textured_mesh` | TRELLIS model for textured mesh |
-| Image Mesh Painting | `trellis_image_mesh_painting` | TRELLIS model for mesh painting |
-| Mesh Segmentation | `partfield_mesh_segmentation` | PartField model for segmentation |
-| Auto Rigging | `unirig_auto_rig` | UniRig model for auto-rigging |
-| Auto Rigging | `skintokens_auto_rig` | SkinTokens / TokenRig autoregressive rigging model (skeleton + skinning) |
+| Text to Textured Mesh | `trellis_text_to_textured_mesh` | TRELLIS text → textured mesh |
+| Text Mesh Painting | `trellis_text_mesh_painting` | TRELLIS text mesh painting |
+| Image to Raw Mesh | `hunyuan3dv21_image_to_raw_mesh` | Hunyuan3D v2.1 image → raw mesh (recommended) |
+| Image to Raw Mesh | `ultrashape_image_to_raw_mesh` | UltraShape image → raw mesh |
+| Image to Textured Mesh | `trellis2_image_to_textured_mesh` | TRELLIS.2 image → textured mesh (recommended on DGX) |
+| Image to Textured Mesh | `pixal3d_image_to_textured_mesh` | Pixal3D pixel-aligned PBR textured mesh |
+| Image to Textured Mesh | `hunyuan3dv21_image_to_textured_mesh` | Hunyuan3D v2.1 image → textured mesh |
+| Image to Textured Mesh | `trellis_image_to_textured_mesh` | TRELLIS v1 legacy |
+| Image Mesh Painting | `trellis2_image_mesh_painting` | TRELLIS.2 image mesh painting |
+| Image Mesh Painting | `hunyuan3dv21_image_mesh_painting` | Hunyuan3D v2.1 image mesh painting |
+| Image Mesh Painting | `trellis_image_mesh_painting` | TRELLIS v1 legacy mesh painting |
+| Image to World | `opennexus_image_to_world` | TripoSplat environment + optional props |
+| Image to Splat | `triposplat_image_to_splat` | Single-photo Gaussian splat |
+| Image to Splat | `worldmirror2_reconstruct` | WorldMirror 2.0 multi-photo splat (2+ images) |
+| Image to Splat | `colmap_3dgs_reconstruct` | COLMAP + 3DGS multi-photo splat (3+ images) |
+| Mesh Segmentation | `p3sam_mesh_segmentation` | P3-SAM mesh segmentation |
+| Auto Rigging | `skintokens_auto_rig` | SkinTokens full rig → GLB |
+| Auto Rigging | `unirig_auto_rig` | UniRig template VRM rig |
+| Mesh Retopology | `instant_meshes_retopology` | Instant Meshes CPU retopology |
+| UV Unwrapping | `xatlas_uv_unwrapping` | xatlas UV unwrapping |
+| Text Mesh Editing | `voxhammer_text_mesh_editing` | VoxHammer text mesh edit |
+| Image Mesh Editing | `voxhammer_image_mesh_editing` | VoxHammer image mesh edit |
 
 ---
 
@@ -1819,5 +1926,5 @@ curl "http://localhost:7842/api/v1/system/jobs/history?start_date=2024-01-01T00:
 - Ensure adequate VRAM is available for model operations
 
 
-*Last updated: [2025.07.12]*
-*API Version: 1.0.0* 
+*Last updated: [2026.06.21]*
+*API Version: 2.0.0* 

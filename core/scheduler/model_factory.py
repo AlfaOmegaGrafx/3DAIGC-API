@@ -46,6 +46,10 @@ class ModelFactory:
             "module": "adapters.trellis2_adapter",
             "class": "Trellis2ImageMeshPaintingAdapter",
         },
+        "pixal3d_image_to_textured_mesh": {
+            "module": "adapters.pixal3d_adapter",
+            "class": "Pixal3DImageToTexturedMeshAdapter",
+        },
         # Hunyuan3D adapters
         "hunyuan3dv21_image_to_raw_mesh": {
             "module": "adapters.hunyuan3d_adapter_v21",
@@ -117,6 +121,14 @@ class ModelFactory:
         "triposplat_image_to_splat": {
             "module": "adapters.triposplat_adapter",
             "class": "TripoSplatImageToSplatAdapter",
+        },
+        "colmap_3dgs_reconstruct": {
+            "module": "adapters.colmap_3dgs_adapter",
+            "class": "Colmap3dgsReconstructAdapter",
+        },
+        "worldmirror2_reconstruct": {
+            "module": "adapters.worldmirror2_adapter",
+            "class": "WorldMirror2ReconstructAdapter",
         },
         "opennexus_image_to_world": {
             "module": "adapters.image_to_world_adapter",
@@ -218,10 +230,12 @@ class ModelFactory:
                     else:
                         init_params.setdefault("model_path", mp)
                 elif model_id.startswith("hunyuan3dv21_"):
-                    init_params.setdefault(
-                        "hunyuan3d_root",
-                        mp if mp.startswith("thirdparty/") else "thirdparty/Hunyuan3D-2.1",
+                    code_root = (
+                        mp
+                        if mp.startswith("thirdparty/")
+                        else "thirdparty/Hunyuan3D-2.1"
                     )
+                    init_params["hunyuan3d_root"] = code_root
                     if mp.startswith("thirdparty/"):
                         init_params["model_path"] = "pretrained/tencent/Hunyuan3D-2.1"
                     else:
@@ -413,7 +427,7 @@ def get_model_configs_from_settings(
                     config["init_params"]["model_path"] = weights_path
                     config["model_path"] = weights_path
                 elif model_id.startswith("hunyuan3dv21_"):
-                    config["init_params"]["hunyuan3d_root"] = model_path
+                    config["init_params"]["hunyuan3d_root"] = "thirdparty/Hunyuan3D-2.1"
                     weights_path = "pretrained/tencent/Hunyuan3D-2.1"
                     config["init_params"]["model_path"] = weights_path
                     config["model_path"] = weights_path
@@ -608,7 +622,17 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 model_id="triposplat_image_to_splat",
                 feature_type="image_to_splat",
                 vram_requirement=16384,
-            )
+            ),
+            "colmap_3dgs_reconstruct": ModelFactory.create_model_config(
+                model_id="colmap_3dgs_reconstruct",
+                feature_type="image_to_splat",
+                vram_requirement=8192,
+            ),
+            "worldmirror2_reconstruct": ModelFactory.create_model_config(
+                model_id="worldmirror2_reconstruct",
+                feature_type="image_to_splat",
+                vram_requirement=16384,
+            ),
         }
     )
 

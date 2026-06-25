@@ -36,6 +36,7 @@ from core.utils.exceptions import BaseAPIException
 from .routers import (
     auto_rigging,
     file_upload,
+    image_tools,
     mesh_editing,
     mesh_generation,
     mesh_retopology,
@@ -292,6 +293,8 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 
 app.include_router(file_upload.router, prefix="/api/v1", tags=["File Upload"])
 
+app.include_router(image_tools.router, prefix="/api/v1", tags=["Image Tools"])
+
 app.include_router(mesh_generation.router, prefix="/api/v1", tags=["Mesh Generation"])
 
 app.include_router(mesh_editing.router, prefix="/api/v1", tags=["Mesh Editing"])
@@ -310,6 +313,7 @@ app.include_router(
 
 from api.routers import splat_generation
 from api.routers import world_generation
+from api.routers import spatial_fabric
 
 app.include_router(
     splat_generation.router, prefix="/api/v1", tags=["Splat Generation"]
@@ -317,6 +321,10 @@ app.include_router(
 
 app.include_router(
     world_generation.router, prefix="/api/v1", tags=["World Generation"]
+)
+
+app.include_router(
+    spatial_fabric.router, prefix="/api/v1", tags=["Spatial Fabric"]
 )
 
 

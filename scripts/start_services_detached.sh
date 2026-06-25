@@ -7,12 +7,26 @@ cd "$ROOT"
 mkdir -p logs run
 
 if [[ -f run/api.pid ]] && kill -0 "$(cat run/api.pid)" 2>/dev/null; then
-  echo "API already running (pid $(cat run/api.pid)). Stop it first or use run_server.sh in foreground."
+  echo "API already running (pid $(cat run/api.pid))."
+  echo "Stop first: bash scripts/stop_services.sh"
+  exit 1
+fi
+
+if pgrep -f "$ROOT/scripts/scheduler_service.py" >/dev/null 2>&1; then
+  echo "Scheduler already running (not tracked in run/scheduler.pid)."
+  echo "Stop first: bash scripts/stop_services.sh"
   exit 1
 fi
 
 # shellcheck source=scripts/env_local_gpu.sh
 source "$ROOT/scripts/env_local_gpu.sh"
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
+
 export PYTHONPATH="${PYTHONPATH:-}${PYTHONPATH:+:}$ROOT"
 export P3D_DRAIN_JOBS_ON_SHUTDOWN=1
 export P3D_SHUTDOWN_DRAIN_SEC="${P3D_SHUTDOWN_DRAIN_SEC:-7200}"

@@ -28,6 +28,7 @@ from core.utils.exceptions import BaseAPIException
 from .routers import (
     auto_rigging,
     file_upload,
+    image_tools,
     mesh_editing,
     mesh_generation,
     mesh_retopology,
@@ -244,6 +245,8 @@ app.include_router(system.router, prefix="/api/v1/system", tags=["System"])
 
 app.include_router(file_upload.router, prefix="/api/v1", tags=["File Upload"])
 
+app.include_router(image_tools.router, prefix="/api/v1", tags=["Image Tools"])
+
 app.include_router(mesh_generation.router, prefix="/api/v1", tags=["Mesh Generation"])
 
 app.include_router(mesh_editing.router, prefix="/api/v1", tags=["Mesh Editing"])
@@ -258,6 +261,12 @@ app.include_router(mesh_retopology.router, prefix="/api/v1", tags=["Mesh Retopol
 
 app.include_router(
     mesh_uv_unwrapping.router, prefix="/api/v1", tags=["Mesh UV Unwrapping"]
+)
+
+from api.routers import spatial_fabric
+
+app.include_router(
+    spatial_fabric.router, prefix="/api/v1", tags=["Spatial Fabric"]
 )
 
 

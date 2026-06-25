@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Space-Time / OpenNexus3DStudio contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# Drop-in overlay for NVIDIA xr-ai workers (HTTP FastMCP — same transport as render-mcp).
+# Copy into your xr-ai checkout, e.g.:
+#   agent-samples/xr-render-demo/yaml/3daigc_mcp_overlay.yaml
+#
+# Prerequisites on DGX Spark:
+#   1. 3DAIGC-API running on :7842
+#   2. Start HTTP MCP:  cd /home/sifr/3DAIGC-API/mcp && uv run 3daigc-mcp-http --port 8260
+#
+# Wire daigc_mcp_url into worker config — see dedicated sample:
+#   /home/sifr/xr-ai/agent-samples/3daigc-vlm-example/
+# Run: bash /home/sifr/3DAIGC-API/mcp/scripts/run_xr_ai_3daigc_stack.sh
+
+# MCP server base URL (FastMCP / streamable HTTP)
+daigc_mcp_url: http://localhost:8260
+
+# 3DAIGC-API REST base (for operator reference; MCP adapter reads DAIGC_API_BASE_URL env)
+daigc_api_base_url: http://localhost:7842
+
+# OpenNexus3DStudio on Surface PC (Galaxy XR opens in headset browser for job handoff).
+opennexus_studio_url: https://100.94.108.18:3000
+
+# Suggested system-prompt addition for voice agents:
+# - Use upload_image then image_to_textured_mesh for "make a 3D model of this"
+# - Always wait_for_job after submit tools (jobs take minutes on Spark)
+# - For avatars: generate_rig with rig_mode=template after mesh completes

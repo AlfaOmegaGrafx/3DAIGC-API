@@ -1,0 +1,36 @@
+[project]
+name = "3daigc-mcp"
+version = "0.1.0"
+description = "MCP adapter for 3DAIGC-API — voice/agent access to mesh generation, rigging, and worlds"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "httpx>=0.27",
+  "mcp>=1.6",
+  "pillow>=10.0",
+  "fastmcp>=2.0",
+  "uvicorn>=0.30",
+]
+
+[project.scripts]
+3daigc-mcp = "daigc_mcp.server:main"
+3daigc-mcp-http = "daigc_mcp.http_server:main"
+3daigc-mcp-invoke = "daigc_mcp.invoke:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["daigc_mcp"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
