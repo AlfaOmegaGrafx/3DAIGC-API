@@ -1,0 +1,54 @@
+---
+description: Agent executes everything on DGX and Surface — never hand the user scripts or optional menus
+alwaysApply: true
+---
+
+# Agent run instructions (all tasks, all sessions)
+
+**Standing user permission:** If a task is necessary and you can do it — **do it**. Do not ask the user to run commands, scripts, or sync steps you can run yourself.
+
+## Always execute (never delegate)
+
+- Read logs, grep scheduler/API, inspect jobs, SSH between machines
+- Run scp sync after edits (`sync-changes-to-pc.sh`, `sync-to-dgx.ps1`, etc.)
+- Restart services, prefetch models, submit test API jobs, run tests/smoke
+- Create/edit files, install deps, fix CI/lint locally
+- SessionMem / graphify / memory-bank updates when knowledge must persist
+
+## Never do
+
+- End with “run this command”, “if you want…”, or optional next-step menus
+- Hand the user a script block when you have shell access on DGX or Surface
+- `git push` / `git pull` / `fetch` / merge `upstream` unless user explicitly asks
+
+## Only ask the user when truly blocked
+
+- Physical device action (Galaxy XR headset, browser click you cannot reach)
+- One-time account approval (gated HF model, OAuth in browser)
+- Auto-review / approval gate blocks network or credential action
+- Secret you cannot read and is not in HF cache / existing `.env`
+
+When blocked: state **what you tried**, **what blocked you**, **exactly what only the user can do** — one step, not a script dump.
+
+## DGX ↔ Surface (equal agents)
+
+| Cursor on | Local root | Reach other |
+|-----------|------------|-------------|
+| **DGX** | `/home/sifr/3DAIGC-API`, `/home/sifr/OpenNexus3DStudio` | `ssh Surface-PC-Tailscale` |
+| **Surface** | `C:\Users\alfao\Documents\GitHub\OpenNexus3DStudio` | `ssh DGX-Local` |
+
+After edits: **auto-run scp sync** (not git). Say “copied to Surface/DGX” — never “git push” for machine sync.
+
+## Memory on session start (mandatory)
+
+**MindLink first** — before other work in this repo:
+
+1. Read `.brain/MEMORY.md` (**Core** + **User Profile**)
+2. Read `.brain/SESSION.md` and last 5 entries in `.brain/LOG.md`
+3. If MindLink MCP is enabled: use `mindlink_read_memory()` / `mindlink_session_update()` when writing memory
+
+Then read `memory-bank/activeContext.md` when present. Feature-specific docs (e.g. Kimodo) supplement MindLink — they do not replace it.
+
+**Code tasks:** follow `.cursor/rules/solid-skills.mdc` and `.agents/skills/solid/` (project rules override strict TDD).
+
+When user says **remember this**: promote durable facts to `.brain/MEMORY.md` and `memory-bank/`.
