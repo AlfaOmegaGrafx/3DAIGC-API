@@ -403,8 +403,11 @@ FodyWeavers.xsd
 # cache 
 .pytest_cache
 
-# we are vibe coding!
-.cursor 
+# Cursor: commit rules only; MCP/settings stay local
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+.cursor/mcp.json
 
 # logs 
 lightning_logs 
@@ -414,6 +417,7 @@ logs
 exp_results 
 outputs 
 test_results
+graphify-out/
 
 # pretrained models
 pretrained
