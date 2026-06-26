@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mindlink": {
+      "type": "stdio",
+      "command": "mindlink",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "MINDLINK_PROJECT_PATH": "/home/sifr/3DAIGC-API"
+      }
+    }
+  }
+}

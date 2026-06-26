@@ -1,0 +1,31 @@
+---
+description: Apply solid-skills (SOLID, clean code, architecture) when writing, refactoring, or reviewing code
+alwaysApply: false
+---
+
+# Solid Skills — 3DAIGC-API
+
+Project skill: `.agents/skills/solid/` ([ramziddin/solid-skills](https://github.com/ramziddin/solid-skills)). Lock: `skills-lock.json`.
+
+## When to apply
+
+Use on **new adapters**, **router/service refactors**, **scheduler changes**, and **code review** — not on log triage, model prefetch, or env/server ops.
+
+## Stack overrides (skill is TypeScript/NestJS-biased)
+
+| Layer | Apply as |
+|-------|----------|
+| API | FastAPI routers thin; business logic in `core/` and `adapters/` |
+| Jobs | Scheduler + Redis queue; adapters implement model interface |
+| Config | `config/models.yaml` + adapter class; verify `/api/v1/system/models` |
+
+## Project rules win over skill defaults
+
+1. **Minimize scope** — smallest correct diff; no drive-by refactors.
+2. **Tests** — add when requested or for regressions; TDD for new pure helpers/adapters, not every config tweak.
+3. **Legacy** — do not split large adapters for line-count targets unless refactor is the task.
+4. **Complementary changes** — API shape changes need matching OpenNexus3DStudio client updates.
+
+## Prefer from the skill
+
+Single responsibility per adapter, interface segregation for model params, code smells in touched files, clean architecture at module boundaries.
