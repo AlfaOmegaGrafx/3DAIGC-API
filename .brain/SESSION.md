@@ -25,8 +25,8 @@ None — setup complete on DGX.
 
 ## Blockers
 
-None on DGX.
+None on DGX or Surface.
 
 ## Up Next
 
-Use `mindlink_read_memory` / `mindlink_write_memory` MCP tools in new Cursor sessions; run `mindlink verify` after major memory updates.
+Agents must read MindLink at session start (see `.cursor/rules/agent-run-instructions.mdc`).

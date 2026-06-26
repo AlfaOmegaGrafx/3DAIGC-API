@@ -83,3 +83,4 @@ Docs: `docs/api_documentation.md` | Memory-bank: `memory-bank/`
 - Before declaring Kimodo broken: verify all 4 Llama safetensor shards in HF cache
 - Never commit `.env` (contains secrets); agent has no GitHub push access
 - XR remote log: `/home/sifr/logs/xr-remote-log.txt` (needs hub `?remoteLog=1`)
+- Surface git: no GitHub SSH key — pull via HTTPS over `ssh Surface-PC-Tailscale`; DGX has GitHub SSH for push <!-- added: 2026-06-26 -->
