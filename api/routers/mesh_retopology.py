@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
+from api.object_name import ObjectNamed, enrich_job_inputs, enrich_job_metadata
 from api.routers.file_upload import resolve_file_id_async
 from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
@@ -54,7 +55,7 @@ def validate_model_preference(
 
 
 # Request models
-class MeshRetopologyRequest(BaseModel):
+class MeshRetopologyRequest(ObjectNamed):
     """Request for mesh retopology"""
 
     mesh_path: Optional[str] = Field(None, description="Path to the input mesh file")
@@ -176,16 +177,19 @@ async def retopologize_mesh(
         user_id = current_user.user_id if current_user else None
         job_request = JobRequest(
             feature="mesh_retopology",
-            inputs={
-                "mesh_path": mesh_file_path,
-                "target_vertex_count": request.target_vertex_count,
-                "output_format": request.output_format,
-                "seed": request.seed,
-                **(request.model_parameters or {}),
-            },
+            inputs=enrich_job_inputs(
+                {
+                    "mesh_path": mesh_file_path,
+                    "target_vertex_count": request.target_vertex_count,
+                    "output_format": request.output_format,
+                    "seed": request.seed,
+                    **(request.model_parameters or {}),
+                },
+                request.object_name,
+            ),
             model_preference=request.model_preference,
             priority=1,
-            metadata={"feature_type": "mesh_retopology"},
+            metadata=enrich_job_metadata("mesh_retopology", request.object_name),
             user_id=user_id,
         )
 

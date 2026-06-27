@@ -8,7 +8,7 @@ logging:
 # Security configuration
 security:
   rate_limit_per_minute: 60
-  # Wildcard works for browser clients (Character Studio / Vite) with Bearer auth; use explicit URLs if you need cookie credentialed CORS.
+  # Wildcard works for browser clients (OpenNexus3DStudio / Vite) with Bearer auth; use explicit URLs if you need cookie credentialed CORS.
   cors_origins: ["*"]
   api_key_required: false
 

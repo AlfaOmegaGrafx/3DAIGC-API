@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
+from api.object_name import ObjectNamed, enrich_job_inputs, enrich_job_metadata
 from api.routers.file_upload import resolve_file_id_async
 from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
@@ -39,7 +40,7 @@ class MaskEllipsoid(BaseModel):
 
 
 # Request models
-class TextMeshEditingRequest(BaseModel):
+class TextMeshEditingRequest(ObjectNamed):
     """Request for text-guided mesh editing"""
     
     mesh_path: Optional[str] = Field(None, description="Path to input mesh file (for local files)")
@@ -97,7 +98,7 @@ class TextMeshEditingRequest(BaseModel):
         return v
 
 
-class ImageMeshEditingRequest(BaseModel):
+class ImageMeshEditingRequest(ObjectNamed):
     """Request for image-guided mesh editing"""
     
     mesh_path: Optional[str] = Field(None, description="Path to input mesh file")
@@ -259,21 +260,24 @@ async def text_mesh_editing(
         
         job_request = JobRequest(
             feature="text_mesh_editing",
-            inputs={
-                "mesh_path": mesh_file_path,
-                "mask_type": mask_type,
-                "mask_center": mask_center,
-                "mask_params": mask_params,
-                "source_prompt": request.source_prompt,
-                "target_prompt": request.target_prompt,
-                "num_views": request.num_views,
-                "resolution": request.resolution,
-                "output_format": request.output_format,
-                **(request.model_parameters or {}),
-            },
+            inputs=enrich_job_inputs(
+                {
+                    "mesh_path": mesh_file_path,
+                    "mask_type": mask_type,
+                    "mask_center": mask_center,
+                    "mask_params": mask_params,
+                    "source_prompt": request.source_prompt,
+                    "target_prompt": request.target_prompt,
+                    "num_views": request.num_views,
+                    "resolution": request.resolution,
+                    "output_format": request.output_format,
+                    **(request.model_parameters or {}),
+                },
+                request.object_name,
+            ),
             model_preference=request.model_preference,
             priority=1,
-            metadata={"feature_type": "text_mesh_editing"},
+            metadata=enrich_job_metadata("text_mesh_editing", request.object_name),
             user_id=user_id,
         )
         
@@ -367,22 +371,25 @@ async def image_mesh_editing(
         
         job_request = JobRequest(
             feature="image_mesh_editing",
-            inputs={
-                "mesh_path": mesh_file_path,
-                "mask_type": mask_type,
-                "mask_center": mask_center,
-                "mask_params": mask_params,
-                "source_image_path": source_image_path,
-                "target_image_path": target_image_path,
-                "mask_image_path": mask_image_path,
-                "num_views": request.num_views,
-                "resolution": request.resolution,
-                "output_format": request.output_format,
-                **(request.model_parameters or {}),
-            },
+            inputs=enrich_job_inputs(
+                {
+                    "mesh_path": mesh_file_path,
+                    "mask_type": mask_type,
+                    "mask_center": mask_center,
+                    "mask_params": mask_params,
+                    "source_image_path": source_image_path,
+                    "target_image_path": target_image_path,
+                    "mask_image_path": mask_image_path,
+                    "num_views": request.num_views,
+                    "resolution": request.resolution,
+                    "output_format": request.output_format,
+                    **(request.model_parameters or {}),
+                },
+                request.object_name,
+            ),
             model_preference=request.model_preference,
             priority=1,
-            metadata={"feature_type": "image_mesh_editing"},
+            metadata=enrich_job_metadata("image_mesh_editing", request.object_name),
             user_id=user_id,
         )
         

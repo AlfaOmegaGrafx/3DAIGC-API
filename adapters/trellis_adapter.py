@@ -19,6 +19,9 @@ from core.models.base import ModelStatus
 from core.models.mesh_models import ImageToMeshModel, TextToMeshModel
 from core.utils.thumbnail_utils import generate_mesh_thumbnail
 from core.utils.mesh_utils import MeshProcessor
+from utils.utils3d_compat import ensure_utils3d_torch_compat
+
+ensure_utils3d_torch_compat()
 
 logger = logging.getLogger(__name__)
 

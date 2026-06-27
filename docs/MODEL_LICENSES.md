@@ -1,6 +1,6 @@
-# Model & weight license audit (Open3DStudio / 3DAIGC-API)
+# Model & weight license audit (OpenNexus3DStudio / 3DAIGC-API)
 
-**Hard prerequisite:** Any model integrated into Open3DStudio or shipped to paying users must be **cleared for commercial use** under its license. Research-only or personal-use weights are **not allowed** in production builds.
+**Hard prerequisite:** Any model integrated into OpenNexus3DStudio or shipped to paying users must be **cleared for commercial use** under its license. Research-only or personal-use weights are **not allowed** in production builds.
 
 This document is the source of truth. Re-check upstream licenses when upgrading weights or swapping mirrors (e.g. `fishwowater/*` vs `tencent/*`).
 
@@ -40,6 +40,7 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | `partuv_uv_unwrapping` | PartField `model_objaverse.ckpt` | NVIDIA (via PartField) | **BLOCKED** | Same weights as PartField |
 | `voxhammer_text_mesh_editing` | VoxHammer + TRELLIS | MIT | **OK** | TRELLIS weights MIT |
 | `voxhammer_image_mesh_editing` | VoxHammer + TRELLIS | MIT | **OK** | |
+| `kimodo_text_to_motion` | `Kimodo-SOMA-RP-v1.1` (+ `nv-tlabs/kimodo` code) | NVIDIA Open Model + Apache-2.0 | **CONDITIONAL** | **Ship SOMA-RP only.** Do not enable SMPL-X/G1 variants (see Kimodo section). |
 
 ---
 
@@ -50,7 +51,7 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | DINOv2 ViT-g | `facebook/dinov2-giant` | Apache-2.0 | **OK** | Used by TRELLIS v1, Hunyuan |
 | DINOv3 ViT-L | `facebook/dinov3-vitl16-pretrain-lvd1689m` | [DINOv3 License](https://github.com/facebookresearch/dinov3/blob/main/LICENSE.md) | **CONDITIONAL** | Commercial allowed; export/military restrictions; HF gated access |
 | Background removal | `ZhengPeng7/BiRefNet` | MIT | **OK** | **Use this** for TRELLIS.2 rembg |
-| Background removal | `briaai/RMBG-2.0` | Bria personal / non-commercial | **BLOCKED** | **Never use** in Open3DStudio (Microsoft default in upstream `pipeline.json`) |
+| Background removal | `briaai/RMBG-2.0` | Bria personal / non-commercial | **BLOCKED** | **Never use** in OpenNexus3DStudio (Microsoft default in upstream `pipeline.json`) |
 | RealESRGAN | `RealESRGAN_x4plus.pth` | BSD-3-Clause (typical) | **OK** | Hunyuan texture upscaler; confirm release terms |
 | TRELLIS.2 rembg | See BiRefNet above | MIT | **OK** | Config patched in `pretrained/TRELLIS.2/TRELLIS.2-4B/*.json` |
 
@@ -99,9 +100,26 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 - Weights on HF tagged **Apache-2.0** (commercial-friendly).
 - Pipeline still depends on **Hunyuan3D-2.1** for coarse mesh → inherits Tencent **CONDITIONAL** rules.
 
+### NVIDIA Kimodo text-to-motion (`kimodo_text_to_motion`)
+
+**What we ship:** `Kimodo-SOMA-RP-v1.1` via `adapters/kimodo_adapter.py` (SOMA skeleton → `studio_motion.json` for uploaded VRM).
+
+| Asset | Source | License | Commercial | Action |
+|-------|--------|---------|--------------|--------|
+| Kimodo Python package | [nv-tlabs/kimodo](https://github.com/nv-tlabs/kimodo) | Apache-2.0 | **OK** | Code in `thirdparty/kimodo` |
+| **Kimodo-SOMA-RP-v1.1** (default) | [HF Kimodo collection](https://huggingface.co/collections/nvidia/kimodo-v1) | [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) | **CONDITIONAL** | **Allowed for commercial product use** under NVIDIA Open Model terms (accept HF/NVIDIA terms; follow redistribution/output rules). |
+| Kimodo-SOMA/G1 **SEED** | Same collection | NVIDIA Open Model + **BONES-SEED** dataset license | **CONDITIONAL** | Benchmark/seed weights — not used in API adapter; review BONES-SEED if enabling. |
+| **Kimodo-SMPLX-RP-v1** | Same collection | **NVIDIA R&D / internal scientific R&D model license** | **BLOCKED** | Non-commercial R&D only — **do not expose** in OpenNexus3DStudio or `models.yaml`. |
+| Kimodo-G1-RP | Same collection | NVIDIA Open Model | **CONDITIONAL** | Robot (Unitree G1) skeleton — not wired; different retarget path than VRM. |
+| Bones Rigplay 700h (training) | Proprietary (NVIDIA) | Proprietary | N/A | Training data for RP models; inference outputs are user-generated NPZ/JSON — counsel on redistribution of bundled motion files. |
+| SOMA-X skeleton lib | [NVlabs/SOMA-X](https://github.com/NVlabs/SOMA-X) | Verify upstream `LICENSE` | **CONDITIONAL** | Runtime dep for SOMA joint naming / optional `[soma]` extra. |
+| Output **NPZ** / **studio_motion.json** | Generated at inference | Governed by model license + your ToS | **OK** (typical) | User prompts → motion artifacts; do not redistribute pretrained weights. |
+
+**Audit conclusion:** **No conflict** if the API stays on **Kimodo-SOMA-RP-v1.1** only. **SMPL-X NPZ weights are BLOCKED** for commercial OpenNexus3DStudio — same class as NVIDIA PartField/PartPacker R&D licenses. G1/SOMA NPZ checkpoint families other than SOMA-RP-v1.1 need separate legal review before enabling.
+
 ---
 
-## OK for commercial use (typical Open3DStudio deployment)
+## OK for commercial use (typical OpenNexus3DStudio deployment)
 
 | Component | License |
 |-----------|---------|
@@ -127,7 +145,7 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 # Default: only download / verify commercial-safe model groups
 export COMMERCIAL_USE=1
 
-# Opt-in for research-only weights (NOT for Open3DStudio production)
+# Opt-in for research-only weights (NOT for OpenNexus3DStudio production)
 export ALLOW_NON_COMMERCIAL_MODELS=1
 ./scripts/download_models.sh -m partfield,partpacker
 ```
@@ -136,7 +154,7 @@ export ALLOW_NON_COMMERCIAL_MODELS=1
 
 ## Commercial alternatives (replace BLOCKED routes)
 
-Use this when shipping Open3DStudio. **Integration effort** is approximate (S/M/L).
+Use this when shipping OpenNexus3DStudio. **Integration effort** is approximate (S/M/L).
 
 ### Mesh segmentation (replaces PartField)
 
@@ -174,7 +192,7 @@ Use this when shipping Open3DStudio. **Integration effort** is approximate (S/M/
 | TRELLIS / TRELLIS.2 / Hunyuan3D-2.1 | MIT / CONDITIONAL | Already in product; prefer these over PartPacker. |
 | PartPacker | NVIDIA non-commercial | **Do not ship** |
 
-### Recommended Open3DStudio path (minimal new work)
+### Recommended OpenNexus3DStudio path (minimal new work)
 
 1. **Segmentation:** **`p3sam_mesh_segmentation`** — enabled in `config/models.yaml` (Tencent **CONDITIONAL**).
 2. **Retopo:** **`instant_meshes_retopology`** — enabled; build binary via `./scripts/install_instant_meshes.sh` or set `INSTANT_MESHES_BIN`.

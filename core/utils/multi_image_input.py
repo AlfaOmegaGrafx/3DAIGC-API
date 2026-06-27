@@ -1,32 +1,30 @@
-"""Shared helpers for multi-image job inputs (Phase 1+ roadmap)."""
+"""Multi-image job helpers (Phase 1–3 — docs/MULTI_IMAGE_SPLAT_ROADMAP.md)."""
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 MAX_REFERENCE_IMAGES = 7
 MAX_TOTAL_IMAGES = MAX_REFERENCE_IMAGES + 1
 
 
 def normalize_reference_image_file_ids(
-    reference_ids: Optional[Iterable[str]],
+    reference_file_ids: Optional[Sequence[str]],
     *,
     primary_file_id: Optional[str] = None,
+    max_refs: int = MAX_REFERENCE_IMAGES,
 ) -> List[str]:
-    """
-    Dedupe reference file IDs and drop the primary if duplicated.
-
-    Returns at most ``MAX_REFERENCE_IMAGES`` ids.
-    """
-    primary = (primary_file_id or "").strip()
-    seen: set[str] = set()
+    """Dedupe reference file IDs, drop primary, cap count."""
     out: List[str] = []
-    for raw in reference_ids or []:
-        fid = str(raw).strip()
+    seen = set()
+    primary = (primary_file_id or "").strip()
+    for raw in reference_file_ids or []:
+        fid = (raw or "").strip()
         if not fid or fid == primary or fid in seen:
             continue
         seen.add(fid)
         out.append(fid)
-        if len(out) >= MAX_REFERENCE_IMAGES:
+        if len(out) >= max_refs:
             break
     return out
 
@@ -34,36 +32,55 @@ def normalize_reference_image_file_ids(
 def collect_local_image_paths(
     primary_path: str,
     reference_paths: Optional[Iterable[str]] = None,
+    *,
+    max_total: int = MAX_TOTAL_IMAGES,
 ) -> List[str]:
-    """Primary first, unique local paths (for worker-side job inputs)."""
-    out: List[str] = [primary_path]
-    seen = {primary_path}
+    """Primary first, then unique existing reference paths."""
+    primary = str(primary_path)
+    out: List[str] = [primary]
+    seen = {primary}
     for raw in reference_paths or []:
-        p = str(raw).strip()
-        if not p or p in seen:
+        p = str(raw)
+        if p in seen:
+            continue
+        if not Path(p).is_file():
             continue
         seen.add(p)
         out.append(p)
-    return out[:MAX_TOTAL_IMAGES]
+        if len(out) >= max_total:
+            break
+    return out
 
 
-def should_use_multiview_mesh(image_paths: List[str], inputs: dict) -> bool:
-    if inputs.get("use_multiview_mesh") is False:
+def _flag(inputs: dict, key: str, default: bool = False) -> bool:
+    val = inputs.get(key)
+    if val is None:
+        return default
+    return bool(val)
+
+
+def should_use_multiview_mesh(image_paths: Sequence[str], inputs: dict) -> bool:
+    """TRELLIS v1 multiview when 2+ views and not explicitly disabled."""
+    if inputs.get("reconstruction_mode") == "single":
         return False
-    if inputs.get("use_multiview_mesh") is True and len(image_paths) >= 2:
-        return True
+    if _flag(inputs, "use_multiview_mesh", default=True) is False:
+        return False
     return len(image_paths) >= 2
 
 
-def should_use_colmap_reconstruction(image_paths: List[str], inputs: dict) -> bool:
-    if inputs.get("reconstruction_mode") == "generative":
+def should_use_colmap_reconstruction(image_paths: Sequence[str], inputs: dict) -> bool:
+    """COLMAP path when 3+ views or explicitly requested."""
+    mode = inputs.get("reconstruction_mode")
+    if mode == "generative":
         return False
-    if inputs.get("reconstruction_mode") == "colmap":
+    if mode == "colmap":
+        return len(image_paths) >= 1
+    if _flag(inputs, "use_colmap_reconstruction", default=False):
         return len(image_paths) >= 3
     return len(image_paths) >= 3
 
 
-def should_use_worldmirror_reconstruction(image_paths: List[str], inputs: dict) -> bool:
+def should_use_worldmirror_reconstruction(image_paths: Sequence[str], inputs: dict) -> bool:
     if inputs.get("reconstruction_mode") == "generative":
         return False
     if inputs.get("reconstruction_mode") == "worldmirror":
@@ -72,19 +89,15 @@ def should_use_worldmirror_reconstruction(image_paths: List[str], inputs: dict) 
 
 
 def multi_image_generation_info(
+    image_paths: Sequence[str],
     *,
-    primary_file_id: Optional[str],
-    reference_file_ids: Optional[Iterable[str]] = None,
-    phase: str = "1_primary_only",
-) -> dict:
-    """Metadata block attached to splat/mesh job results."""
-    refs = normalize_reference_image_file_ids(
-        reference_file_ids, primary_file_id=primary_file_id
-    )
-    return {
+    phase: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    info: Dict[str, Any] = {
+        "multi_image_count": len(image_paths),
         "multi_image_phase": phase,
-        "primary_image_file_id": primary_file_id,
-        "reference_image_file_ids": refs,
-        "reference_count": len(refs),
-        "total_image_count": 1 + len(refs),
     }
+    if extra:
+        info.update(extra)
+    return info

@@ -2,6 +2,8 @@
 
 Reference for the **OpenNexus3DStudio + 3DAIGC-API** voice agent on Galaxy XR.
 
+**Canonical database:** `mcp/yaml/xr_voice_commands.yaml` (patterns, routing, MCP tools, example phrases). Runtime loader: `daigc_mcp/xr_voice_commands.py`. Worker config: `xr_voice_commands_yaml` in `3daigc_vlm_example_worker.yaml`.
+
 **Bookmark:** `https://10.0.0.32:8443/?remoteLog=1` (Surface proxy → DGX hub)
 
 ---

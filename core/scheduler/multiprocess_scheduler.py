@@ -50,7 +50,13 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from core.utils.job_time import (
+    enrich_job_timestamps,
+    format_job_date,
+    format_job_timestamp,
+    job_elapsed_seconds,
+    job_now,
+)
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -493,7 +499,15 @@ class MultiprocessModelScheduler:
         self.worker_last_used: Dict[
             str, float
         ] = {}  # worker_id -> timestamp of last use
-        self.idle_cleanup_interval: float = 30.0  # seconds to wait before considering cleanup, about 20 mins (30 seconds for debug)
+        self.worker_idle_timeout_sec: float = float(
+            os.environ.get("P3D_WORKER_IDLE_SEC", "900")
+        )
+        self.worker_evict_idle_sec: float = float(
+            os.environ.get("P3D_WORKER_EVICT_SEC", "30")
+        )
+        self.idle_cleanup_interval: float = float(
+            os.environ.get("P3D_WORKER_IDLE_CHECK_SEC", "60")
+        )
 
         # Scheduler state
         self.running = False
@@ -586,9 +600,11 @@ class MultiprocessModelScheduler:
     async def get_job_status(self, job_id: str) -> Optional[Dict]:
         """Get job status and results"""
         job = await self.job_queue.get_job(job_id)
-        if job:
-            return job.to_dict()
-        return None
+        if not job:
+            return None
+        if isinstance(job, dict):
+            return job
+        return job.to_dict()
 
     async def cancel_job(self, job_id: str) -> bool:
         """Cancel a job if possible"""
@@ -845,11 +861,10 @@ class MultiprocessModelScheduler:
                         "position": i + 1,
                         "job_id": job.job_id,
                         "feature": job.feature,
-                        "created_at": job.created_at.isoformat(),
+                        "created_at": format_job_timestamp(job.created_at),
+                        "created_at_date": format_job_date(job.created_at),
                         "priority": job.priority,
-                        "waiting_time_seconds": (
-                            datetime.utcnow() - job.created_at
-                        ).total_seconds(),
+                        "waiting_time_seconds": job_elapsed_seconds(job.created_at),
                     }
                 )
 
@@ -1234,8 +1249,20 @@ class MultiprocessModelScheduler:
                 f"Created worker {worker_id} for model {model_id} on GPU {gpu_id}"
             )
 
+            default_load_timeout = int(
+                os.environ.get("P3D_WORKER_LOAD_TIMEOUT_SEC", "900")
+            )
+            load_timeout = int(
+                model_config.get("worker_load_timeout_sec", default_load_timeout)
+            )
+            logger.info(
+                f"Waiting up to {load_timeout}s for worker {worker_id} model load"
+            )
             ready = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self._wait_worker_ready(ready_queue, worker_process, 900)
+                None,
+                lambda: self._wait_worker_ready(
+                    ready_queue, worker_process, load_timeout
+                ),
             )
             if not ready.get("success"):
                 error = ready.get("error", "Worker failed during model load")
@@ -1294,7 +1321,7 @@ class MultiprocessModelScheduler:
                         idle_time = current_time - last_used
 
                         # Only consider workers that have been idle for a reasonable time
-                        if idle_time > 10:  # 10 seconds
+                        if idle_time > self.worker_evict_idle_sec:
                             worker_vram = worker_config.model_config.get(
                                 "vram_requirement", 1024
                             )
@@ -1364,7 +1391,7 @@ class MultiprocessModelScheduler:
                         idle_time = current_time - last_used
 
                         # Only consider workers that have been idle for a reasonable time
-                        if idle_time > 10:  # 10 seconds
+                        if idle_time > self.worker_evict_idle_sec:
                             idle_workers.append((worker_id, idle_time))
 
             # Sort by idle time (longest idle first)
@@ -1514,23 +1541,9 @@ class MultiprocessModelScheduler:
                         last_used = self.worker_last_used.get(worker_id, current_time)
                         idle_time = current_time - last_used
 
-                        # Only destroy workers that have been idle for a significant time
-                        # and only if we have more than one worker for the model
-                        if idle_time > self.idle_cleanup_interval:
-                            worker_config = self.worker_configs[worker_id]
-                            model_id = worker_config.model_config["model_id"]
-
-                            # Keep at least one worker per model if possible
-                            model_workers = self.worker_assignments.get(model_id, [])
-                            idle_workers_for_model = [
-                                w
-                                for w in model_workers
-                                if w in self.worker_status and not self.worker_status[w]
-                            ]
-
-                            # Only destroy if there are multiple idle workers for this model
-                            if len(idle_workers_for_model) > 1:
-                                workers_to_destroy.append(worker_id)
+                        # Unload workers that have been idle long enough (default 15 min).
+                        if idle_time > self.worker_idle_timeout_sec:
+                            workers_to_destroy.append(worker_id)
 
                 # Destroy excess idle workers
                 for worker_id in workers_to_destroy:

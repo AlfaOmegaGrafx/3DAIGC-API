@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict
 
+from core.utils.job_time import enrich_job_timestamps, job_now
 from sqlalchemy import (
     Column,
     DateTime,
@@ -70,7 +71,7 @@ class JobModel(Base):
     assigned_model = Column(String(100), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, nullable=False, default=job_now, index=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
@@ -94,35 +95,31 @@ class JobModel(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert database model to dictionary."""
-        return {
-            "job_id": self.job_id,
-            "feature": self.feature,
-            "inputs": self.inputs,
-            "model_preference": self.model_preference,
-            "priority": self.priority,
-            "timeout_seconds": self.timeout_seconds,
-            "metadata": self.job_metadata or {},
-            "user_id": self.user_id,
-            "status": self.status,
-            "progress": self.progress,
-            "assigned_model": self.assigned_model,
-            "created_at": self.created_at.isoformat(),
-            "started_at": self.started_at.isoformat()
-            if self.started_at is not None
-            else None,
-            "completed_at": self.completed_at.isoformat()
-            if self.completed_at is not None
-            else None,
-            "result": self.result,
-            "error": self.error,
-            "retry_count": self.retry_count,
-            "max_retries": self.max_retries,
-            "last_retry_at": self.last_retry_at.isoformat()
-            if self.last_retry_at is not None
-            else None,
-            "retry_reason": self.retry_reason,
-        }
+        """Convert database model to dictionary (timestamps in US Eastern)."""
+        return enrich_job_timestamps(
+            {
+                "job_id": self.job_id,
+                "feature": self.feature,
+                "inputs": self.inputs,
+                "model_preference": self.model_preference,
+                "priority": self.priority,
+                "timeout_seconds": self.timeout_seconds,
+                "metadata": self.job_metadata or {},
+                "user_id": self.user_id,
+                "status": self.status,
+                "progress": self.progress,
+                "assigned_model": self.assigned_model,
+                "created_at": self.created_at,
+                "started_at": self.started_at,
+                "completed_at": self.completed_at,
+                "result": self.result,
+                "error": self.error,
+                "retry_count": self.retry_count,
+                "max_retries": self.max_retries,
+                "last_retry_at": self.last_retry_at,
+                "retry_reason": self.retry_reason,
+            }
+        )
 
     @classmethod
     def from_job_request(cls, job_request) -> "JobModel":

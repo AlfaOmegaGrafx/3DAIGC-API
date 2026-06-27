@@ -12,6 +12,7 @@ class Settings:
     api_token: str | None
     poll_interval_sec: float
     default_job_timeout_sec: float
+    poll_timeout_sec: float
     max_image_side: int
 
     @classmethod
@@ -26,6 +27,9 @@ class Settings:
             poll_interval_sec=float(os.environ.get("DAIGC_MCP_POLL_INTERVAL_SEC", "3")),
             default_job_timeout_sec=float(
                 os.environ.get("DAIGC_MCP_DEFAULT_JOB_TIMEOUT_SEC", "600")
+            ),
+            poll_timeout_sec=float(
+                os.environ.get("DAIGC_MCP_POLL_TIMEOUT_SEC", "15")
             ),
             max_image_side=int(os.environ.get("DAIGC_MCP_MAX_IMAGE_SIDE", "2048")),
         )

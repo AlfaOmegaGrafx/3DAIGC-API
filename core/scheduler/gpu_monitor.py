@@ -42,15 +42,24 @@ class GPUMonitor:
         except (TypeError, ValueError):
             return None
 
+    def _device_memory_mb(self, gpu_id: int) -> tuple[int, int, int]:
+        """Return (free_mb, used_mb, total_mb) from the CUDA driver."""
+        free_bytes, total_bytes = torch.cuda.mem_get_info(gpu_id)
+        total_mb = total_bytes // (1024 * 1024)
+        free_mb = free_bytes // (1024 * 1024)
+        used_mb = max(0, total_mb - free_mb)
+        return free_mb, used_mb, total_mb
+
     def _torch_gpu_dicts(self) -> List[Dict]:
         gpus: List[Dict] = []
         for i in range(torch.cuda.device_count()):
             props = torch.cuda.get_device_properties(i)
+            _, _, total_mb = self._device_memory_mb(i)
             gpus.append(
                 {
                     "id": i,
                     "name": props.name,
-                    "memory_total": props.total_memory // (1024 * 1024),
+                    "memory_total": total_mb or (props.total_memory // (1024 * 1024)),
                 }
             )
         return gpus
@@ -130,7 +139,11 @@ class GPUMonitor:
 
         available_vram = self.get_gpu_available_vram(gpu_id)
         if available_vram >= vram_mb:
-            self.allocated_vram_per_gpu[gpu_id] += vram_mb
+            total_vram = self.gpu_total_vram.get(gpu_id, 0)
+            next_allocated = self.allocated_vram_per_gpu[gpu_id] + vram_mb
+            if total_vram > 0:
+                next_allocated = min(next_allocated, total_vram)
+            self.allocated_vram_per_gpu[gpu_id] = next_allocated
             logger.info(
                 f"Allocated {vram_mb}MB VRAM on GPU {gpu_id}, total allocated: {self.allocated_vram_per_gpu[gpu_id]}MB"
             )
@@ -164,6 +177,21 @@ class GPUMonitor:
             f"Deallocated {vram_mb}MB VRAM from GPU {gpu_id}, total allocated: {self.allocated_vram_per_gpu[gpu_id]}MB"
         )
 
+    def _uma_underreports_free_vram(self, gpu_id: int, device_free_mb: int) -> bool:
+        """
+        DGX Spark GB10 unified memory: cudaMemGetInfo free is often ~8–10 GB while
+        nvidia-smi shows almost no compute usage. Trust worker bookkeeping until we
+        allocate models, or scheduling blocks every large mesh job.
+        """
+        if gpu_id >= torch.cuda.device_count():
+            return False
+        name = torch.cuda.get_device_properties(gpu_id).name
+        if "GB10" not in name:
+            return False
+        allocated = self.allocated_vram_per_gpu.get(gpu_id, 0)
+        total = self.gpu_total_vram.get(gpu_id, 0)
+        return allocated == 0 and total >= 90000 and device_free_mb < total * 0.15
+
     def get_gpu_available_vram(self, gpu_id: int) -> int:
         """
         Get available VRAM for a specific GPU.
@@ -182,8 +210,24 @@ class GPUMonitor:
                 return 0
             total_vram = self.gpu_total_vram[gpu_id]
             allocated_vram = self.allocated_vram_per_gpu.get(gpu_id, 0)
-            available_vram = total_vram - allocated_vram - self.memory_buffer
-            return max(0, available_vram)
+            tracking_available = total_vram - allocated_vram - self.memory_buffer
+            tracking_available = max(0, tracking_available)
+
+            # GB10 / Grace Hopper: GPUtil often returns NaN. Use driver-reported free
+            # memory so scheduling matches real VRAM instead of inflated bookkeeping.
+            if (
+                not self._use_gputil_for_memory
+                and gpu_id < torch.cuda.device_count()
+            ):
+                device_free, _, device_total = self._device_memory_mb(gpu_id)
+                if device_total > 0:
+                    self.gpu_total_vram[gpu_id] = device_total
+                device_available = max(0, device_free - self.memory_buffer)
+                if self._uma_underreports_free_vram(gpu_id, device_free):
+                    return tracking_available
+                return min(tracking_available, device_available)
+
+            return tracking_available
         else:
             # Real-time query mode
             gpu_status = self.get_gpu_status()

@@ -25,5 +25,5 @@
 1. Clone `thirdparty/Arc2Avatar` + submodules  
 2. `download_models.py` weights on DGX  
 3. Adapter: image → head splat `.ply`  
-4. Character Studio: load splat on `head` bone; expression map FLAME → VRM presets  
+4. OpenNexus3DStudio: load splat on `head` bone; expression map FLAME → VRM presets  
 5. Document license in `docs/MODEL_LICENSES.md`

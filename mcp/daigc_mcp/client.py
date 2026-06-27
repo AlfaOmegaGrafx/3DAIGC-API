@@ -42,10 +42,12 @@ class DaigcClient:
         token: str | None = None,
         *,
         timeout_sec: float = 120.0,
+        poll_timeout_sec: float = 15.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self._timeout = httpx.Timeout(timeout_sec)
+        self._poll_timeout = httpx.Timeout(poll_timeout_sec)
 
     def _headers(self, *, json_body: bool = False) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -108,7 +110,7 @@ class DaigcClient:
         last: dict[str, Any] = {}
 
         while True:
-            last = await self.get_job(job_id)
+            last = await self.get_job(job_id, poll=True)
             status = (last.get("status") or "").lower()
             if status in {"completed", "failed", "cancelled"}:
                 return last
@@ -133,8 +135,15 @@ class DaigcClient:
     async def get_model_parameters(self, model_id: str) -> dict[str, Any]:
         return await self.get(f"/api/v1/system/models/{model_id}/parameters")
 
-    async def get_job(self, job_id: str) -> dict[str, Any]:
-        return await self.get(f"/api/v1/system/jobs/{job_id}")
+    async def get_job(self, job_id: str, *, poll: bool = False) -> dict[str, Any]:
+        timeout = self._poll_timeout if poll else self._timeout
+        url = f"{self.base_url}/api/v1/system/jobs/{job_id}"
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, headers=self._headers())
+        parsed = self._parse_response(response)
+        if isinstance(parsed, dict):
+            return parsed
+        raise DaigcApiError(f"Unexpected job status payload for {job_id}", detail=parsed)
 
     async def upload_image_bytes(
         self,

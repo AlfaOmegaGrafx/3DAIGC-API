@@ -36,6 +36,8 @@ class ModelConfig(BaseSettings):
     model_path: Optional[str] = None
     enabled: bool = True
     init_params: Dict[str, Any] = {}
+    license_note: Optional[str] = None
+    worker_load_timeout_sec: Optional[int] = None
 
     model_config = SettingsConfigDict(protected_namespaces=("settings_",))
 

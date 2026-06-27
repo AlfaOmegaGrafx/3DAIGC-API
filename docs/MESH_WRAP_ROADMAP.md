@@ -19,7 +19,7 @@ CC Wrap / MeshMonk-style **non-rigid registration**:
 | Phase | Deliverable | Status |
 |-------|-------------|--------|
 | 0 | Bones-only template rig + alignment fix | Done |
-| 1 | VRM export merges template **metadata** + skeleton | Done (Character Studio) |
+| 1 | VRM export merges template **metadata** + skeleton | Done (OpenNexus3DStudio) |
 | 2 | `rig_mode: template_wrap` stub → same as rig + doc | Stub |
 | 3 | Blender shrinkwrap + shape-key transfer (head ROI) | R&D |
 | 4 | External MeshMonk / wrap binary integration | R&D |

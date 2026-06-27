@@ -6,7 +6,7 @@ Handles connection management, transactions, and CRUD operations.
 import logging
 import os
 from contextlib import contextmanager
-from datetime import datetime
+from core.utils.job_time import format_job_timestamp, job_elapsed_seconds, job_now
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, asc, create_engine, desc, func, text
@@ -365,9 +365,7 @@ class DatabaseManager:
                 # Calculate queue wait time
                 max_wait_time = 0
                 if oldest_queued_time:
-                    max_wait_time = (
-                        datetime.utcnow() - oldest_queued_time
-                    ).total_seconds()
+                    max_wait_time = job_elapsed_seconds(oldest_queued_time)
 
                 return {
                     "queued_jobs": status_counts.get("queued", 0),
@@ -377,7 +375,7 @@ class DatabaseManager:
                     "cancelled_jobs": status_counts.get("cancelled", 0),
                     "total_jobs": sum(status_counts.values()),
                     "max_wait_time_seconds": max_wait_time,
-                    "oldest_queued_time": oldest_queued_time.isoformat()
+                    "oldest_queued_time": format_job_timestamp(oldest_queued_time)
                     if oldest_queued_time
                     else None,
                 }
@@ -398,7 +396,7 @@ class DatabaseManager:
         """
         try:
             with self.get_session() as session:
-                current_time = datetime.utcnow()
+                current_time = job_now()
 
                 # Find processing jobs that have exceeded their timeout
                 expired_jobs = (

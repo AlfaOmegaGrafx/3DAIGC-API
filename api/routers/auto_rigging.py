@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
+from api.object_name import ObjectNamed, enrich_job_inputs, enrich_job_metadata
 from api.routers.file_upload import resolve_file_id_async
 from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
@@ -59,7 +60,7 @@ def validate_model_preference(
 
 
 # Request models
-class AutoRigRequest(BaseModel):
+class AutoRigRequest(ObjectNamed):
     """Request for auto-rigging"""
 
     mesh_path: Optional[str] = Field(None, description="Path to the input mesh file")
@@ -165,20 +166,23 @@ async def generate_rig(
         # Validate rig type
         job_request = JobRequest(
             feature="auto_rig",
-            inputs={
-                "rig_mode": request.rig_mode.lower(),
-                "mesh_path": mesh_file_path,
-                "output_format": request.output_format,
-                **(
-                    {"humanoid_template_id": request.humanoid_template_id}
-                    if request.humanoid_template_id
-                    else {}
-                ),
-                **(request.model_parameters or {}),
-            },
+            inputs=enrich_job_inputs(
+                {
+                    "rig_mode": request.rig_mode.lower(),
+                    "mesh_path": mesh_file_path,
+                    "output_format": request.output_format,
+                    **(
+                        {"humanoid_template_id": request.humanoid_template_id}
+                        if request.humanoid_template_id
+                        else {}
+                    ),
+                    **(request.model_parameters or {}),
+                },
+                request.object_name,
+            ),
             model_preference=request.model_preference,
             priority=1,
-            metadata={"feature_type": "auto_rig"},
+            metadata=enrich_job_metadata("auto_rig", request.object_name),
             user_id=user_id,
         )
 
@@ -201,7 +205,7 @@ async def generate_rig(
 async def get_humanoid_template_manifest(template_id: str):
     """
     Return regression manifest + live VRM analysis for template.vrm.
-    Used by Character Studio VRM export and expression planning.
+    Used by OpenNexus3DStudio VRM export and expression planning.
     """
     try:
         spec = get_template(template_id)

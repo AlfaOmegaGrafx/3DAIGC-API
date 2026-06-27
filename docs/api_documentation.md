@@ -2,7 +2,7 @@
 
 ## Overview
 
-This API provides scalable 3D AI model inference capabilities with VRAM-aware scheduling. The backend supports multiple 3D AIGC features including mesh generation, texturing, segmentation, and auto-rigging.
+This API provides scalable 3D AI model inference capabilities with VRAM-aware scheduling. The backend supports multiple 3D AIGC features including mesh generation, texturing, segmentation, auto-rigging, and text-to-motion (Kimodo).
 
 **Base URL**: `http://localhost:7842` (or your configured host/port)
 **API Version**: v1
@@ -194,10 +194,11 @@ All API responses follow a consistent format:
     "mesh_retopology": ["instant_meshes_retopology"],
     "uv_unwrapping": ["xatlas_uv_unwrapping"],
     "text_mesh_editing": ["voxhammer_text_mesh_editing"],
-    "image_mesh_editing": ["voxhammer_image_mesh_editing"]
+    "image_mesh_editing": ["voxhammer_image_mesh_editing"],
+    "text_to_motion": ["kimodo_text_to_motion"]
   },
-  "total_features": 13,
-  "total_models": 22
+  "total_features": 14,
+  "total_models": 23
 }
 ```
 
@@ -1024,6 +1025,41 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVAT
   "output_formats": ["fbx", "glb"]
 }
 ```
+
+---
+
+
+## Text-to-Motion Endpoints (Kimodo)
+
+Generates **studio motion JSON** from a natural-language prompt for playback in **OpenNexus3DStudio** (VRM or rigged GLB via `KimodoMotionPromptBar` → `kimodoMotionLoader.js`).
+
+**Model:** `kimodo_text_to_motion` (Kimodo-SOMA-RP-v1.1 only — see `docs/MODEL_LICENSES.md`).
+
+### Text to Motion
+- **URL**: `/api/v1/text-to-motion/generate`
+- **Method**: `POST`
+- **Description**: Text prompt → SOMA motion → `studio_motion.json` (and optional NPZ/BVH assets on job download)
+- **Authentication**: Required if user_auth_enabled is true
+- **Request Body**:
+```json
+{
+  "prompt": "walking forward naturally",
+  "model_preference": "kimodo_text_to_motion",
+  "duration_sec": 4
+}
+```
+- **Response**:
+```json
+{
+  "job_id": "job_123456",
+  "status": "queued",
+  "message": "Text-to-motion job queued successfully"
+}
+```
+
+Poll with `GET /api/v1/jobs/{job_id}`; download motion via `GET /jobs/{job_id}/download?asset=studio_motion` (exact asset keys per job result).
+
+Ops runbook: `memory-bank/kimodo-text-to-motion-ops.md` on DGX.
 
 ---
 
@@ -1886,6 +1922,7 @@ Enabled models are defined in `config/models.yaml`. Use `/api/v1/system/models` 
 | UV Unwrapping | `xatlas_uv_unwrapping` | xatlas UV unwrapping |
 | Text Mesh Editing | `voxhammer_text_mesh_editing` | VoxHammer text mesh edit |
 | Image Mesh Editing | `voxhammer_image_mesh_editing` | VoxHammer image mesh edit |
+| Text to Motion | `kimodo_text_to_motion` | Kimodo SOMA → studio_motion.json for OpenNexus3DStudio |
 
 ---
 

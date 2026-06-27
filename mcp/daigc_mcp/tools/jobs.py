@@ -52,14 +52,12 @@ async def wait_for_job(
         "feature": job.get("feature") or (job.get("result") or {}).get("feature"),
         "processing_time_sec": job.get("processing_time"),
         "summary": summarize_completed_job(job),
+        "job": job,
     }
     if args.get("include_urls", True):
         out.update(job_result_urls(job))
     if job.get("status") == "failed":
         out["error"] = job.get("error") or job.get("message") or "Job failed"
-        out["job"] = job
-    elif args.get("include_full_job"):
-        out["job"] = job
     return out
 
 

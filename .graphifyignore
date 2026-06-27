@@ -1,0 +1,15 @@
+# Graphify scope: first-party API code only (skip vendored model repos)
+thirdparty/
+thirdparty_work/
+outputs/
+test_outputs/
+venv/
+.venv/
+models/
+logs/
+run/
+graphify-out/
+assets/example_autorig/
+assets/example_meshseg/
+__pycache__/
+*.pyc

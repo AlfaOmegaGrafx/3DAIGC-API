@@ -264,9 +264,14 @@ app.include_router(
 )
 
 from api.routers import spatial_fabric
+from api.routers import motion_generation
 
 app.include_router(
     spatial_fabric.router, prefix="/api/v1", tags=["Spatial Fabric"]
+)
+
+app.include_router(
+    motion_generation.router, prefix="/api/v1", tags=["Motion Generation"]
 )
 
 

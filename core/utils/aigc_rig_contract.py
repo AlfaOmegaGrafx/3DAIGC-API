@@ -1,9 +1,9 @@
 """
 Avatar rig export contract (API-side gate).
 
-Spec: ``OpenNexus3DStudio/CharacterStudio/docs/API_AVATAR_RIG_CONTRACT.md``
+Spec: ``OpenNexus3DStudio/docs/API_AVATAR_RIG_CONTRACT.md``
 
-Mirrors Character Studio ``aigcRigContract.js`` codes so remote logs can show
+Mirrors OpenNexus3DStudio ``aigcRigContract.js`` codes so remote logs can show
 ``[API-Contract] PASS|FAIL`` from the DGX export path before the client loads a GLB.
 
 glTF / three.js conventions: Y-up, character forward ≈ -Z.
@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-# Failure codes — keep in sync with Character Studio `aigcRigContract.js`
+# Failure codes — keep in sync with OpenNexus3DStudio `aigcRigContract.js`
 CHARACTER_UPSIDE_DOWN = "character_upside_down"
 CHARACTER_FACING_BACKWARDS = "character_facing_backwards"
 MESH_BONE_VERTICAL_MISMATCH = "mesh_bone_vertical_mismatch"

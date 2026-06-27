@@ -1,0 +1,39 @@
+---
+description: Kimodo text-to-motion ops on DGX — failures, prefetch, timeouts; agents run everything
+alwaysApply: true
+---
+
+# Kimodo text-to-motion (3DAIGC-API / DGX)
+
+Read **`memory-bank/kimodo-text-to-motion-ops.md`** at task start when Kimodo, text-to-motion, or animation job failures are mentioned.
+
+## Agent must execute (not delegate)
+
+On Kimodo failure or setup — **same global rule as all tasks** (see `agent-run-instructions.mdc`):
+
+1. `grep` / `tail logs/scheduler.log` for job id, worker load, traceback
+2. `curl` job history + submit test job if verifying fix
+3. `bash scripts/prefetch_kimodo_deps.sh` if Llama cache incomplete
+4. `bash scripts/restart_services.sh` after config changes
+5. Verify 4 Llama shards: `model-00001-of-00004` … `model-00004-of-00004`
+
+**Do not** reply with "run this script" — execute it (global rule: `agent-run-instructions.mdc`).
+
+## Invariants (do not revert)
+
+| Setting | Value |
+|---------|-------|
+| `worker_load_timeout_sec` | `3600` in `config/models.yaml` for `kimodo_text_to_motion` |
+| `TEXT_ENCODER_DEVICE` | `cpu` in `.env` |
+| Prefetch script | `scripts/prefetch_kimodo_deps.sh` |
+
+Default scheduler worker load timeout is **900s** — insufficient for first Llama download.
+
+## Normal log lines
+
+- `Text encoder service is unreachable, falling back to local LLM2Vec encoder` — expected (no sidecar)
+- `Waiting up to 3600s for worker … model load` — expected on cold start
+
+## Frontend counterpart
+
+OpenNexus3DStudio: `KimodoMotionPromptBar.jsx`, `taskManager.js` text-to-motion flow. Backend-only changes sync via `OpenNexus3DStudio/scripts/sync-to-pc.sh --include-agent-context` when rules/memory-bank updated on DGX.

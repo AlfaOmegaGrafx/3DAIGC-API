@@ -19,6 +19,7 @@ from core.utils.file_utils import encode_file_to_base64, get_file_size_mb
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_SERVICE_STARTED_AT = time.time()
 
 
 @router.get("/health", summary="Health check")
@@ -27,7 +28,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "uptime": time.time(),
+        "uptime": round(time.time() - _SERVICE_STARTED_AT, 1),
     }
 
 
@@ -805,6 +806,8 @@ async def get_job_status(job_id: str, request: Request):
             # Convert mesh file path to URL
             mesh_path = None
             possible_mesh_keys = [
+                "output_motion_path",
+                "output_studio_motion_path",
                 "output_mesh_path",
                 "mesh_path",
                 "output_path",
@@ -1044,6 +1047,8 @@ async def download_job_result(
             output_path = result.get("world_manifest_path")
         else:
             possible_keys = [
+                "output_motion_path",
+                "output_studio_motion_path",
                 "output_mesh_path",
                 "output_splat_path",
                 "mesh_path",

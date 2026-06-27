@@ -6,6 +6,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.utils.job_time import enrich_job_timestamps, job_elapsed_seconds, job_now, parse_job_timestamp
+
 from .database_manager import DatabaseManager
 from .database_models import JobModel
 from .database_models import JobStatus as DBJobStatus
@@ -45,7 +47,7 @@ class JobRequest:
 
         # Status tracking
         self.status = JobStatus.QUEUED
-        self.created_at = datetime.utcnow()
+        self.created_at = job_now()
         self.started_at: Optional[datetime] = None
         self.completed_at: Optional[datetime] = None
         self.result: Optional[Dict[str, Any]] = None
@@ -79,11 +81,11 @@ class JobRequest:
         job.assigned_model = data.get("assigned_model")
 
         # Parse datetime fields
-        job.created_at = datetime.fromisoformat(data["created_at"])
+        job.created_at = parse_job_timestamp(data["created_at"]) or job_now()
         if data.get("started_at"):
-            job.started_at = datetime.fromisoformat(data["started_at"])
+            job.started_at = parse_job_timestamp(data["started_at"])
         if data.get("completed_at"):
-            job.completed_at = datetime.fromisoformat(data["completed_at"])
+            job.completed_at = parse_job_timestamp(data["completed_at"])
 
         job.result = data.get("result")
         job.error = data.get("error")
@@ -92,7 +94,7 @@ class JobRequest:
         job.retry_count = data.get("retry_count", 0)
         job.max_retries = data.get("max_retries", 5)
         if data.get("last_retry_at"):
-            job.last_retry_at = datetime.fromisoformat(data["last_retry_at"])
+            job.last_retry_at = parse_job_timestamp(data["last_retry_at"])
         job.retry_reason = data.get("retry_reason")
 
         return job
@@ -133,69 +135,65 @@ class JobRequest:
         return job
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert job to dictionary representation"""
-        return {
-            "job_id": self.job_id,
-            "feature": self.feature,
-            "inputs": self.inputs,
-            "model_preference": self.model_preference,
-            "priority": self.priority,
-            "timeout_seconds": self.timeout_seconds,
-            "user_id": self.user_id,
-            "status": self.status.value,
-            "progress": self.progress,
-            "assigned_model": self.assigned_model,
-            "created_at": self.created_at.isoformat(),
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat()
-            if self.completed_at
-            else None,
-            "result": self.result,
-            "error": self.error,
-            "metadata": self.metadata,
-            "retry_count": self.retry_count,
-            "max_retries": self.max_retries,
-            "last_retry_at": self.last_retry_at.isoformat()
-            if self.last_retry_at
-            else None,
-            "retry_reason": self.retry_reason,
-        }
+        """Convert job to dictionary representation (timestamps in US Eastern)."""
+        return enrich_job_timestamps(
+            {
+                "job_id": self.job_id,
+                "feature": self.feature,
+                "inputs": self.inputs,
+                "model_preference": self.model_preference,
+                "priority": self.priority,
+                "timeout_seconds": self.timeout_seconds,
+                "user_id": self.user_id,
+                "status": self.status.value,
+                "progress": self.progress,
+                "assigned_model": self.assigned_model,
+                "created_at": self.created_at,
+                "started_at": self.started_at,
+                "completed_at": self.completed_at,
+                "result": self.result,
+                "error": self.error,
+                "metadata": self.metadata,
+                "retry_count": self.retry_count,
+                "max_retries": self.max_retries,
+                "last_retry_at": self.last_retry_at,
+                "retry_reason": self.retry_reason,
+            }
+        )
 
     def is_expired(self) -> bool:
         """Check if job has exceeded timeout"""
         if self.started_at and self.status == JobStatus.PROCESSING:
-            elapsed = datetime.utcnow() - self.started_at
-            return elapsed.total_seconds() > self.timeout_seconds
+            return job_elapsed_seconds(self.started_at) > self.timeout_seconds
         return False
 
     def is_waiting_too_long(self) -> bool:
         """Check if job has been waiting in queue for more than 1 hour (impossible job detection)"""
-        elapsed = datetime.utcnow() - self.created_at
-        return elapsed.total_seconds() > 3600  # 1 hour in seconds
+        return job_elapsed_seconds(self.created_at) > 3600  # 1 hour in seconds
 
     def mark_started(self, model_id: str):
         """Mark job as started"""
         self.status = JobStatus.PROCESSING
-        self.started_at = datetime.utcnow()
+        self.started_at = job_now()
         self.assigned_model = model_id
 
     def mark_completed(self, result: Dict[str, Any]):
         """Mark job as completed"""
         self.status = JobStatus.COMPLETED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = job_now()
         self.result = result
         self.progress = 1.0
 
     def mark_failed(self, error: str):
         """Mark job as failed"""
         self.status = JobStatus.FAILED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = job_now()
         self.error = error
 
     def mark_cancelled(self):
         """Mark job as cancelled"""
         self.status = JobStatus.CANCELLED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = job_now()
 
 
 class JobQueue:

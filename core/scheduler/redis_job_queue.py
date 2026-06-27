@@ -8,8 +8,16 @@ without conflicts.
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Dict, Optional
+
+from core.utils.job_time import (
+    enrich_job_timestamps,
+    ensure_job_tz,
+    format_job_timestamp,
+    job_now,
+    parse_job_timestamp,
+)
 
 import redis.asyncio as aioredis
 
@@ -95,7 +103,7 @@ class RedisJobQueue:
             "model_preference": job_request.model_preference or "",
             "priority": job_request.priority,
             "status": _status_to_str(JobStatus.QUEUED),
-            "created_at": job_request.created_at.isoformat(),
+            "created_at": format_job_timestamp(job_request.created_at),
             "metadata": json.dumps(job_request.metadata),
             "user_id": job_request.user_id or "",  # Store user_id for job isolation
         }
@@ -103,7 +111,7 @@ class RedisJobQueue:
         await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
         
         # Add to pending queue (sorted by priority and timestamp)
-        score = job_request.priority * 1e10 + job_request.created_at.timestamp()
+        score = job_request.priority * 1e10 + ensure_job_tz(job_request.created_at).timestamp()
         await self.redis.zadd(self.pending_queue_key, {job_id: score})
         
         logger.info(f"Enqueued job {job_id} to Redis")
@@ -146,7 +154,7 @@ class RedisJobQueue:
         )
         # Restore original job_id and created_at
         job_request.job_id = job_id
-        job_request.created_at = datetime.fromisoformat(job_data["created_at"])
+        job_request.created_at = parse_job_timestamp(job_data["created_at"]) or job_now()
         
         return job_request
 
@@ -163,13 +171,13 @@ class RedisJobQueue:
         if job_data_str:
             job_data = json.loads(job_data_str)
             job_data["status"] = _status_to_str(JobStatus.QUEUED)
-            job_data["created_at"] = datetime.utcnow().isoformat()
+            job_data["created_at"] = format_job_timestamp(job_now())
             job_data.pop("error", None)
             job_data.pop("failed_at", None)
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
             
             # Re-add to queue with same priority but earlier timestamp for FIFO
-            score = job_data.get("priority", 0) * 1e10 + datetime.utcnow().timestamp() - 1000
+            score = job_data.get("priority", 0) * 1e10 + job_now().timestamp() - 1000
             await self.redis.zadd(self.pending_queue_key, {job_id: score})
 
     async def complete_job(self, job_id: str, result: Any):
@@ -185,7 +193,7 @@ class RedisJobQueue:
         if job_data_str:
             job_data = json.loads(job_data_str)
             job_data["status"] = _status_to_str(JobStatus.COMPLETED)
-            job_data["completed_at"] = datetime.utcnow().isoformat()
+            job_data["completed_at"] = format_job_timestamp(job_now())
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
         
         # Store result
@@ -208,7 +216,7 @@ class RedisJobQueue:
             job_data = json.loads(job_data_str)
             job_data["status"] = _status_to_str(JobStatus.FAILED)
             job_data["error"] = error
-            job_data["failed_at"] = datetime.utcnow().isoformat()
+            job_data["failed_at"] = format_job_timestamp(job_now())
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
 
     async def fail_processing_jobs(self, error: str) -> int:
@@ -251,7 +259,7 @@ class RedisJobQueue:
             if result_str:
                 job_data["result"] = json.loads(result_str)
         
-        return job_data
+        return enrich_job_timestamps(job_data)
 
     async def get_queue_status(self) -> Dict:
         """Get queue statistics"""
@@ -273,7 +281,7 @@ class RedisJobQueue:
         if not self.redis:
             raise RuntimeError("Redis not connected")
 
-        cutoff_time = datetime.utcnow() - timedelta(hours=self.max_job_age_hours)
+        cutoff_time = job_now() - timedelta(hours=self.max_job_age_hours)
         
         # Get all jobs
         all_jobs = await self.redis.hgetall(self.jobs_hash_key)
@@ -286,7 +294,7 @@ class RedisJobQueue:
             if job_data["status"] in [_status_to_str(JobStatus.COMPLETED), _status_to_str(JobStatus.FAILED)]:
                 completed_at = job_data.get("completed_at") or job_data.get("failed_at")
                 if completed_at:
-                    job_time = datetime.fromisoformat(completed_at)
+                    job_time = ensure_job_tz(parse_job_timestamp(completed_at) or job_now())
                     if job_time < cutoff_time:
                         await self.redis.hdel(self.jobs_hash_key, job_id)
                         await self.redis.hdel(self.results_hash_key, job_id)
@@ -305,7 +313,7 @@ class RedisJobQueue:
             job_data = json.loads(job_data_str)
             job_data["status"] = _status_to_str(JobStatus.PROCESSING)
             job_data["model_id"] = model_id
-            job_data["started_at"] = datetime.utcnow().isoformat()
+            job_data["started_at"] = format_job_timestamp(job_now())
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
 
     async def cancel_job(self, job_id: str) -> bool:

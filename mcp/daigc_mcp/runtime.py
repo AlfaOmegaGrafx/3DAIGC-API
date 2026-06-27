@@ -18,7 +18,11 @@ async def run_tool(
     settings: Settings | None = None,
 ) -> Any:
     cfg = settings or get_settings()
-    client = DaigcClient(cfg.api_base_url, cfg.api_token)
+    client = DaigcClient(
+        cfg.api_base_url,
+        cfg.api_token,
+        poll_timeout_sec=cfg.poll_timeout_sec,
+    )
     spec = tool_map().get(name)
     if spec is None:
         return {"error": f"Unknown tool: {name}"}

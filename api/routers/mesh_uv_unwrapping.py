@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
+from api.object_name import ObjectNamed, enrich_job_inputs, enrich_job_metadata
 from api.routers.file_upload import resolve_file_id_async
 from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
@@ -54,7 +55,7 @@ def validate_model_preference(
 
 
 # Request models
-class MeshUVUnwrappingRequest(BaseModel):
+class MeshUVUnwrappingRequest(ObjectNamed):
     """Request for mesh UV unwrapping"""
 
     mesh_path: Optional[str] = Field(None, description="Path to the input mesh file")
@@ -181,19 +182,22 @@ async def unwrap_mesh(
         user_id = current_user.user_id if current_user else None
         job_request = JobRequest(
             feature="uv_unwrapping",
-            inputs={
-                "mesh_path": mesh_file_path,
-                "distortion_threshold": request.distortion_threshold,
-                "pack_method": request.pack_method,
-                "save_individual_parts": request.save_individual_parts,
-                "save_visuals": request.save_visuals,
-                "output_format": request.output_format,
-                **(request.model_parameters or {}),
-            },
+            inputs=enrich_job_inputs(
+                {
+                    "mesh_path": mesh_file_path,
+                    "distortion_threshold": request.distortion_threshold,
+                    "pack_method": request.pack_method,
+                    "save_individual_parts": request.save_individual_parts,
+                    "save_visuals": request.save_visuals,
+                    "output_format": request.output_format,
+                    **(request.model_parameters or {}),
+                },
+                request.object_name,
+            ),
             model_preference=request.model_preference,
             user_id=user_id,
             priority=1,
-            metadata={"feature_type": "uv_unwrapping"},
+            metadata=enrich_job_metadata("uv_unwrapping", request.object_name),
         )
 
         job_id = await scheduler.schedule_job(job_request)

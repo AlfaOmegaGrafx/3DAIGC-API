@@ -63,7 +63,7 @@ image_to_textured_mesh:
     max_workers: 1
 
   trellis2_image_to_textured_mesh:
-    vram_requirement: 23552  # MB (23GB, TRELLIS.2)
+    vram_requirement: 20480  # MB — GB10 UMA often reports ~21GB free; 23.5GB gate blocked jobs
     supported_inputs: ["image"]
     supported_outputs: ["glb", "obj"]
     model_path: "thirdparty/TRELLIS.2"
@@ -247,3 +247,17 @@ image_mesh_editing:
     model_path: "thirdparty/VoxHammer"
     enabled: true
     max_workers: 1
+
+# Text-to-motion (Kimodo SOMA → studio_motion.json for uploaded VRM in OpenNexus3DStudio)
+text_to_motion:
+  kimodo_text_to_motion:
+    vram_requirement: 8192  # MB — use TEXT_ENCODER_DEVICE=cpu if VRAM tight (~17GB full GPU)
+    supported_inputs: ["text"]
+    supported_outputs: ["studio_motion", "npz", "bvh"]
+    model_path: "thirdparty/kimodo"
+    enabled: true
+    max_workers: 1
+    worker_load_timeout_sec: 3600  # first cold start loads Llama-3-8B (~16GB)
+    license_note: "Ship Kimodo-SOMA-RP-v1.1 only (NVIDIA Open Model — CONDITIONAL). Kimodo-SMPLX-RP-v1 is BLOCKED (R&D license). See docs/MODEL_LICENSES.md."
+    init_params:
+      hf_model_id: "Kimodo-SOMA-RP-v1.1"
