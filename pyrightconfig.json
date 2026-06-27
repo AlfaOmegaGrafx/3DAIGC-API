@@ -1,0 +1,14 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "exclude": [
+    "thirdparty",
+    ".venv-kimodo",
+    "venv",
+    "outputs",
+    "pretrained"
+  ]
+}
