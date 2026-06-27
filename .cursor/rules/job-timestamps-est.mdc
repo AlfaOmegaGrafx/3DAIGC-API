@@ -1,0 +1,16 @@
+---
+description: Task job timestamps use US Eastern (EST/EDT), not UTC
+globs:
+  - core/scheduler/**
+  - core/utils/job_time.py
+  - api/routers/system.py
+  - docs/api_documentation.md
+alwaysApply: false
+---
+
+# Job timestamps (task queue)
+
+- **Internal clock:** `America/New_York` (EST/EDT) via `core/utils/job_time.py`.
+- **API responses:** ISO timestamps in Eastern time; each timestamp has a `*_date` companion in **mm-dd-yyyy** (e.g. `created_at_date`).
+- **Field:** `"timezone": "America/New_York"` on enriched job payloads.
+- Use `job_now()`, `format_job_timestamp()`, `format_job_date()`, `enrich_job_timestamps()` — do not use `datetime.utcnow()` for job lifecycle times.

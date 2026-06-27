@@ -6,9 +6,13 @@ RP1_ENV="/home/sifr/.config/rp1-spatial-fabric/rp1.env"
 API_ENV="/home/sifr/3DAIGC-API/.env"
 source "$RP1_ENV"
 
-PUBLIC_BASE="https://${MSF_PUBLIC_HOST}"
-if [[ "${MSF_PUBLIC_PORT:-443}" != "443" ]]; then
-  PUBLIC_BASE="${PUBLIC_BASE}:${MSF_PUBLIC_PORT}"
+if [[ -n "${MSF_BROWSER_PUBLIC_URL:-}" ]]; then
+  PUBLIC_BASE="${MSF_BROWSER_PUBLIC_URL%/}"
+else
+  PUBLIC_BASE="https://${MSF_PUBLIC_HOST}"
+  if [[ "${MSF_PUBLIC_PORT:-443}" != "443" ]]; then
+    PUBLIC_BASE="${PUBLIC_BASE}:${MSF_PUBLIC_PORT}"
+  fi
 fi
 
 touch "$API_ENV"

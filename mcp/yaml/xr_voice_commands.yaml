@@ -1,0 +1,89 @@
+# XR Voice Command Database — 3daigc-vlm-example (canonical)
+#
+# Loaded at runtime by daigc_mcp.xr_voice_commands (worker daigc_tools.py).
+# Human-readable guide: mcp/docs/XR_VOICE_COMMANDS.md
+# Wake phrases ("hey agent") live in voice_gate.yaml — not here.
+#
+# patterns: regex fragments OR'd together (re.IGNORECASE). Agent strips wake phrase first.
+
+version: 1
+
+routing:
+  - text_to_textured_mesh
+  - auto_rig
+  - image_to_world
+  - image_to_textured_mesh
+
+intents:
+  image_to_textured_mesh:
+    label: Camera → 3D textured mesh
+    feature: image_to_textured_mesh
+    mcp_tool: image_to_textured_mesh
+    requires_camera: true
+    data_topic: 3daigc.meshResult
+    examples:
+      - make a 3D model of this
+      - create a 3D mesh of what I see
+      - turn this into a 3D model
+      - generate a three-dimensional model
+      - build a mesh from the camera
+      - image to 3D
+      - model this
+      - 3D model of this
+    patterns:
+      - (?:\b(?:make|create|generate|turn|build|model)\b.{0,40}\b(?:3d|three.?d|mesh|model)\b)
+      - \bimage\s+to\s+3d\b
+      - \bmodel\s+this\b
+      - \b3d\s+(?:model|mesh)\b.{0,20}\b(?:this|what\s+i\s+see|camera|view)\b
+
+  text_to_textured_mesh:
+    label: Text → 3D textured mesh
+    feature: text_to_textured_mesh
+    mcp_tool: text_to_textured_mesh
+    requires_camera: false
+    data_topic: 3daigc.meshResult
+    examples:
+      - text to 3D a red sports car
+      - make a 3D model of a wooden chair
+      - from my description create a dragon figurine
+      - describe a coffee mug as 3D
+    patterns:
+      - \btext\s+to\s+3d\b
+      - \bfrom\s+(?:my\s+)?description\b
+      - \bdescribe\s+.+\s+as\s+3d\b
+
+  image_to_world:
+    label: Camera → explorable world
+    feature: image_to_world
+    mcp_tool: image_to_world
+    requires_camera: true
+    data_topic: 3daigc.worldResult
+    skip_if_matched:
+      - image_to_textured_mesh
+    examples:
+      - make a 3D world from this
+      - create an environment from the camera view
+      - build an explorable scene from what I see
+      - image to world
+      - generate a world from this view
+    patterns:
+      - (?:\b(?:make|create|generate|build)\b.{0,40}\b(?:world|environment|scene)\b)
+      - \bimage\s+to\s+world\b
+      - \b(?:world|environment|scene)\b.{0,30}\b(?:this|camera|view|what\s+i\s+see)\b
+
+  auto_rig:
+    label: Auto-rig last mesh in session
+    feature: auto_rig
+    mcp_tool: generate_rig
+    requires_camera: false
+    requires_prior_mesh_job: true
+    data_topic: 3daigc.rigResult
+    examples:
+      - rig this
+      - auto rig the model
+      - add a skeleton to it
+      - rig the model
+    patterns:
+      - (?:\b(?:rig|auto[\s-]?rig|skeleton|skin)\b.{0,30}\b(?:this|it|model|mesh)\b)
+      - (?:\b(?:add|apply)\b.{0,20}\b(?:skeleton|rig)\b)
+      - \brig\s+(?:this|it|the\s+model)\b

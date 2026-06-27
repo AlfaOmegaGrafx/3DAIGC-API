@@ -122,12 +122,34 @@ class Trellis2ImageToTexturedMeshAdapter(ImageToMeshModel):
         try:
             if self.runner is None:
                 raise ValueError("TRELLIS.2 model is not loaded")
+
+            from core.utils.multi_image_input import (
+                collect_local_image_paths,
+                should_use_multiview_mesh,
+            )
+
+            image_path = inputs["image_path"]
+            ref_paths = inputs.get("reference_image_paths") or []
+            view_paths = (
+                list(inputs["image_paths"])
+                if inputs.get("image_paths")
+                else collect_local_image_paths(image_path, ref_paths)
+            )
+            if should_use_multiview_mesh(view_paths, inputs) and len(view_paths) >= 2:
+                logger.info(
+                    "TRELLIS.2 job has %s views — delegating mesh to TRELLIS multiview",
+                    len(view_paths),
+                )
+                from adapters.trellis_adapter import TrellisImageToTexturedMeshAdapter
+
+                delegate = TrellisImageToTexturedMeshAdapter()
+                delegate._load_model()
+                return delegate._process_request(inputs)
             
             # Validate inputs using parent class
             output_format = self._validate_common_inputs(inputs)
             
             # Extract parameters
-            image_path = inputs["image_path"]
             decimation_target = inputs.get("decimation_target", 1000000)
             texture_size = inputs.get("texture_size", 4096)
             remesh = inputs.get("remesh", True)

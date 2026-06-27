@@ -597,6 +597,26 @@ class OutputPathGenerator:
 
         return output_dir / filename
 
+    def generate_motion_path(
+        self,
+        model_id: str,
+        base_name: str,
+        output_format: str = "studio_motion",
+        subdirectory: str = "motions",
+    ) -> Path:
+        """Generate output path for motion clips (Kimodo / text-to-motion)."""
+        output_dir = self.base_output_dir / subdirectory
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = int(time.time())
+        ext = output_format if "." not in output_format else output_format.split(".")[-1]
+        if ext == "studio_motion":
+            filename = f"{model_id}_{base_name}_{timestamp}.studio_motion.json"
+        else:
+            filename = f"{model_id}_{base_name}_{timestamp}.{ext}"
+
+        return output_dir / filename
+
     def generate_info_path(self, mesh_path: Path) -> Path:
         """Generate corresponding JSON info path for a mesh file."""
         return mesh_path.with_suffix(".json")

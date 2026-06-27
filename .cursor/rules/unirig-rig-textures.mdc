@@ -1,0 +1,48 @@
+---
+description: UniRig rig+texture merge — keep proxy mesh bones, project bird textures
+globs: scripts/blender/merge_rig_textures.py,core/utils/format_utils.py,core/utils/unirig_glb_checks.py,adapters/unirig_adapter.py,tests/test_unirig_merge_regression.py
+alwaysApply: false
+---
+
+# UniRig textured rig export (bird regression)
+
+Reference model: **TRELLIS textured bird** (`assets/example_autorig/regression/bird_trellis_textured.glb` + `bird_trellis_rig.fbx`). Not "eagle". Canonical example asset name is `bird`.
+
+## Non-negotiable strategy
+
+1. **Keep** UniRig FBX `character` mesh (~21k verts) + `Armature` — this is where skinning/bones are valid.
+2. **Project** source UVs/materials onto `character` (world-space BVH + barycentric UV).
+3. **Never** substitute the upload mesh, re-skin with `ARMATURE_ENVELOPE` / `ARMATURE_AUTO`, or bake diffuse to proxy as the primary fix.
+
+## Known dead ends (do not reintroduce)
+
+| Approach | Bones | Textures |
+|----------|-------|----------|
+| Source mesh skinning / envelope | broken (big/wrong) | ok-ish |
+| `fbx_to_glb` only | ok | none |
+| Black diffuse bake | ok | black |
+| `DATA_TRANSFER` UV only | ok | warped |
+
+## Acceptance checks (both required)
+
+Run before considering merge "done":
+
+```bash
+pytest tests/test_unirig_merge_regression.py -q
+```
+
+Or inspect metrics — merged GLB must match **bird** baselines:
+
+- **Verts**: ~21188 (must be >> source 5829; must match fbx-only reference)
+- **Joints**: 35
+- **Max bone translation**: ~0.2703
+- **Scene roots**: `character`, `Armature` only (no `geometry_0`, `Node_0`)
+- **Texture**: albedo mean ~77, std ~58; `metallicFactor`/`roughnessFactor` = 1
+
+Post-merge validation in `merge_rigged_fbx_with_source_mesh()` raises if these regress.
+
+## When changing merge code
+
+- Change **texture path only** unless bone regression tests fail.
+- Do not delete/replace the `character` mesh object.
+- After edits, run bird regression test — not just "job completed".

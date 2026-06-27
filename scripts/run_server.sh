@@ -107,12 +107,21 @@ echo ""
 echo "🔍 Checking Redis connection..."
 if command -v redis-cli &> /dev/null; then
     if ! redis-cli -u "$REDIS_URL" ping > /dev/null 2>&1; then
+        if command -v docker &> /dev/null && [ -f "docker-compose.yml" ]; then
+            echo "🔄 Redis not reachable — starting 3daigc-redis..."
+            docker start 3daigc-redis 2>/dev/null \
+                || docker compose up -d redis 2>/dev/null \
+                || true
+            sleep 2
+        fi
+    fi
+    if ! redis-cli -u "$REDIS_URL" ping > /dev/null 2>&1; then
         echo "❌ Cannot connect to Redis at $REDIS_URL"
         echo ""
         echo "Please start Redis first:"
-        echo "   docker run -d -p 6379:6379 redis:latest"
+        echo "   docker compose up -d redis"
         echo "   # or"
-        echo "   redis-server --daemonize yes"
+        echo "   docker run -d -p 6379:6379 --restart unless-stopped --name 3daigc-redis redis:7-alpine"
         exit 1
     fi
     echo "✅ Redis is running"

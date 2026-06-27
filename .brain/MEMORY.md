@@ -84,3 +84,4 @@ Docs: `docs/api_documentation.md` | Memory-bank: `memory-bank/`
 - Never commit `.env` (contains secrets); agent has no GitHub push access
 - XR remote log: `/home/sifr/logs/xr-remote-log.txt` (needs hub `?remoteLog=1`)
 - Surface git: no GitHub SSH key — pull via HTTPS over `ssh Surface-PC-Tailscale`; DGX has GitHub SSH for push <!-- added: 2026-06-26 -->
+- GitHub MCP: [github/github-mcp-server](https://github.com/github/github-mcp-server); PAT in `~/.config/github-mcp/token.env` (never commit) <!-- added: 2026-06-26 -->

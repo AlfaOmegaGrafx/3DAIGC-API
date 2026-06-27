@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
+from api.object_name import ObjectNamed, enrich_job_inputs, enrich_job_metadata
 from api.routers.file_upload import resolve_file_id_async
 from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
@@ -55,7 +56,7 @@ def validate_model_preference(
 
 
 # Request models
-class MeshSegmentationRequest(BaseModel):
+class MeshSegmentationRequest(ObjectNamed):
     """Request for mesh segmentation"""
 
     mesh_path: Optional[str] = Field(None, description="Path to mesh file")
@@ -186,15 +187,18 @@ async def segment_mesh(
         # Create job request
         job_request = JobRequest(
             feature="mesh_segmentation",
-            inputs={
-                "mesh_path": mesh_file_path,
-                "num_parts": request.num_parts,
-                "output_format": request.output_format,
-                **(request.model_parameters or {}),
-            },
+            inputs=enrich_job_inputs(
+                {
+                    "mesh_path": mesh_file_path,
+                    "num_parts": request.num_parts,
+                    "output_format": request.output_format,
+                    **(request.model_parameters or {}),
+                },
+                request.object_name,
+            ),
             model_preference=request.model_preference,
             priority=1,
-            metadata={"feature_type": "mesh_segmentation"},
+            metadata=enrich_job_metadata("mesh_segmentation", request.object_name),
             user_id=user_id,
         )
 

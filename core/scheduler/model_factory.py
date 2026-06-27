@@ -134,6 +134,11 @@ class ModelFactory:
             "module": "adapters.image_to_world_adapter",
             "class": "ImageToWorldAdapter",
         },
+        # Kimodo text-to-motion (SOMA → studio_motion.json for VRM)
+        "kimodo_text_to_motion": {
+            "module": "adapters.kimodo_adapter",
+            "class": "KimodoTextToMotionAdapter",
+        },
         # VoxHammer adapters
         "voxhammer_text_mesh_editing": {
             "module": "adapters.voxhammer_adapter",
@@ -390,6 +395,9 @@ def get_model_configs_from_settings(
                 supported_outputs = getattr(model_config, "supported_outputs", [])
                 max_workers = getattr(model_config, "max_workers", 1)
                 init_params = dict(getattr(model_config, "init_params", None) or {})
+                worker_load_timeout_sec = getattr(
+                    model_config, "worker_load_timeout_sec", None
+                )
             else:
                 logger.warning(f"Unknown model config type for {model_id}, skipping")
                 continue
@@ -435,6 +443,8 @@ def get_model_configs_from_settings(
                 config["supported_inputs"] = supported_inputs
             if supported_outputs:
                 config["supported_outputs"] = supported_outputs
+            if worker_load_timeout_sec:
+                config["worker_load_timeout_sec"] = worker_load_timeout_sec
 
             configs[model_id] = config
             # logger.debug(f"Configured model {model_id} for feature {feature_type}")
@@ -643,6 +653,17 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 model_id="opennexus_image_to_world",
                 feature_type="image_to_world",
                 vram_requirement=20480,
+            )
+        }
+    )
+
+    # Kimodo text-to-motion
+    configs.update(
+        {
+            "kimodo_text_to_motion": ModelFactory.create_model_config(
+                model_id="kimodo_text_to_motion",
+                feature_type="text_to_motion",
+                vram_requirement=8192,
             )
         }
     )
