@@ -1,0 +1,43 @@
+---
+description: HF/venv guardrails for ALL enabled models (registry-driven verify)
+alwaysApply: true
+---
+
+# Model environment guardrails
+
+Reference: `docs/MODEL_ENV_GUARDRAILS.md`
+
+## Enabling or adding a model
+
+1. `config/models.yaml` + `model_factory.py` ADAPTER_REGISTRY
+2. **`config/verify_profiles.yaml`** — required; preflight fails without it
+3. `python scripts/verify_registry.py --validate`
+
+## After any `pip install` into `3DAIGC-API/venv`
+
+Use **`bash scripts/pip_main_venv.sh install …`** (applies constraints + post_pip_guard).
+
+Or manually:
+1. `bash scripts/post_pip_guard.sh`
+2. Restart API: `./scripts/run_server.sh`
+
+## Do not
+
+- Raw `pip install -U transformers` / git diffusers on main `venv`
+- Install Kimodo deps into main `venv` (use `.venv-kimodo` + `constraints-kimodo.txt`)
+- Enable a model in `models.yaml` without a `verify_profiles.yaml` entry
+- Skip restart after venv changes
+- Duplicate `DinoV3FeatureExtractor` in `trellis2/modules/image_feature_extractor.py` (inference re-exports `image_conditioned.py`; layer access via `dinov3_encoder.get_dinov3_encoder_layers`)
+
+## Verify tiers
+
+| Tier | Command | When |
+|------|---------|------|
+| validate | `verify_registry.py --validate` | Every model add/enable |
+| quick | `--tier quick --all-enabled` | API preflight (imports) |
+| infer | `--tier infer --model ID` | Canary before ship |
+| full | `verify_all_enabled_models.sh` | Weekly / release |
+
+## Canary assets
+
+- TRELLIS.2: `fox_test.png`, seed `42` — `scripts/verify_trellis2_canary.sh`

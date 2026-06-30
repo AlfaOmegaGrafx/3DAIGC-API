@@ -85,3 +85,7 @@ echo "For 3DAIGC-API workers, ensure PYTHONPATH includes ${TARGET} or use the sa
 echo "Tip: export TEXT_ENCODER_DEVICE=cpu to reduce VRAM during generation."
 echo "Default HF model: Kimodo-SOMA-RP-v1.1 (see docs/MODEL_LICENSES.md — SMPL-X variant is BLOCKED)."
 echo "On aarch64, motion post-processing is disabled at runtime (MotionCorrection is x86-only)."
+
+echo ""
+echo "=== Kimodo venv drift check ==="
+bash "${ROOT}/scripts/check_kimodo_venv_drift.sh"

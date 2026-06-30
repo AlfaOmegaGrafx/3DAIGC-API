@@ -1,0 +1,56 @@
+# 3DAIGC-API — protected paths (DGX canonical during reconcile).
+# One repo-relative path per line. Lines starting with # are ignored.
+
+# --- Krea 2 text-to-image ---
+adapters/krea2_adapter.py
+api/routers/image_generation.py
+api/routers/system.py
+api/main_multiworker.py
+api/main_singleworker.py
+core/scheduler/model_factory.py
+core/models/image_models.py
+config/models.yaml
+scripts/restart_services.sh
+scripts/verify_hf_conditioning.py
+scripts/setup_krea2.sh
+scripts/post_pip_guard.sh
+scripts/pip_main_venv.sh
+utils/trellis2_utils.py
+.cursor/rules/krea2-text-to-image-ops.mdc
+memory-bank/krea2-text-to-image-ops.md
+
+# --- Model env guardrails (all models) ---
+.cursor/rules/model-env-guardrails.mdc
+config/verify_profiles.yaml
+scripts/verify_registry.py
+scripts/verify_env_compat.py
+scripts/verify_all_enabled_models.sh
+scripts/verify_trellis2_canary.sh
+docs/MODEL_ENV_GUARDRAILS.md
+
+# --- Kimodo text-to-motion ---
+.cursor/rules/kimodo-text-to-motion-ops.mdc
+memory-bank/kimodo-text-to-motion-ops.md
+scripts/prefetch_kimodo_deps.sh
+scripts/setup_kimodo.sh
+scripts/check_kimodo_venv_drift.sh
+
+# --- API stack / scheduler continuity ---
+scripts/verify_api_stack.sh
+scripts/ensure_redis.sh
+scripts/check_scheduler_continuity.sh
+scripts/start_services_detached.sh
+scripts/stop_services.sh
+scripts/run_server.sh
+
+# --- UniRig / rig textures ---
+.cursor/rules/unirig-rig-textures.mdc
+
+# --- Agent ops ---
+.cursor/rules/agent-run-instructions.mdc
+.cursor/rules/terse-debug-ops.mdc
+.cursor/rules/solid-skills.mdc
+scripts/reconcile-api-to-surface.sh
+scripts/lock-it-in.sh
+scripts/protected-paths-lib.sh
+scripts/protected-paths.manifest

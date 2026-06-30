@@ -1,0 +1,12 @@
+---
+description: Implicit or explicit failure intent → DGX log/API debug workflow; infer from context, not keywords
+alwaysApply: true
+---
+
+# Failure signals → debug/fix (3DAIGC-API)
+
+User intent may be **explicit or implicit** — screenshot, “job failed”, “why no image”, “still broken”, etc. **Do not wait for the word `debug`.**
+
+Run **`/home/sifr/OpenNexus3DStudio/memory-bank/debug-ops-workflow.md`** (stack-wide). DGX: `scheduler.log` → job API → feature `*-ops.md` → fix → `restart_services.sh` → verify → sync/docs if needed.
+
+Never ask user to paste errors when logs exist.

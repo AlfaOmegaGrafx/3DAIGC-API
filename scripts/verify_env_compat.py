@@ -99,6 +99,46 @@ def main() -> int:
                 continue
             ok(f"[{tag}] {model_id}: {mp}")
 
+    print("\n=== HF / transformers conditioning ===")
+    hf_script = ROOT / "scripts" / "verify_hf_conditioning.py"
+    if hf_script.is_file():
+        hf_gpu = os.environ.get("P3D_HF_VERIFY_GPU", "").strip() in ("1", "true", "yes")
+        cmd = [sys.executable, str(hf_script)] + (["--gpu"] if hf_gpu else [])
+        proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        print(proc.stdout, end="")
+        if proc.stderr:
+            print(proc.stderr, file=sys.stderr, end="")
+        if proc.returncode != 0:
+            errors += 1
+    else:
+        warn("scripts/verify_hf_conditioning.py missing — skip HF checks")
+
+    print("\n=== Verify registry (enabled models) ===")
+    reg_script = ROOT / "scripts" / "verify_registry.py"
+    if reg_script.is_file():
+        for extra_args in (["--validate"], ["--tier", "quick", "--all-enabled"]):
+            proc = subprocess.run(
+                [sys.executable, str(reg_script), *extra_args],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            print(proc.stdout, end="")
+            if proc.stderr:
+                print(proc.stderr, file=sys.stderr, end="")
+            if proc.returncode != 0:
+                errors += 1
+    else:
+        warn("scripts/verify_registry.py missing — skip registry checks")
+
+    kimodo_drift = ROOT / "scripts" / "check_kimodo_venv_drift.sh"
+    if kimodo_drift.is_file():
+        print("\n=== Kimodo venv drift ===")
+        proc = subprocess.run(["bash", str(kimodo_drift)], cwd=ROOT, capture_output=True, text=True)
+        print(proc.stdout, end="")
+        if proc.returncode != 0:
+            warn("Kimodo venv drift — run: bash scripts/setup_kimodo.sh")
+
     print("\n=== Summary ===")
     if errors:
         print(f"PREFLIGHT_FAIL ({errors} enabled-model prerequisite errors)")

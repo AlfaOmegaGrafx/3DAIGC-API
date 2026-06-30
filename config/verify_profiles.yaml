@@ -1,0 +1,258 @@
+# Verify profile for every enabled model in config/models.yaml.
+# Validated by: python scripts/verify_registry.py --validate
+#
+# tiers: quick (import class), load (load weights), infer (load + process)
+# skip_infer: true — excluded from --all-enabled infer runs (optional / broken upstream)
+
+fixtures:
+  image: assets/example_image/203.png
+  fox_image: assets/example_image/fox_test.png
+  mesh: assets/example_mesh/typical_humanoid_goblin.obj
+  mesh_dragon: assets/example_mesh/typical_creature_dragon.obj
+  mesh_quadruped: assets/example_mesh/typical_creature_quadruped.obj
+  vox_src: assets/example_meshedit/images/2d_render.png
+  vox_tgt: assets/example_meshedit/images/2d_edit.png
+  vox_mask: assets/example_meshedit/images/2d_mask.png
+
+profiles:
+  krea2_turbo_text_to_image:
+    module: adapters.krea2_adapter
+    class: Krea2TurboTextToImageAdapter
+    timeout_sec: 3600
+    inputs:
+      text_prompt: "a small red cube on white background"
+      width: 512
+      height: 512
+      num_inference_steps: 4
+      seed: 42
+      output_format: png
+
+  trellis_text_to_textured_mesh:
+    module: adapters.trellis_adapter
+    class: TrellisTextToTexturedMeshAdapter
+    timeout_sec: 2400
+    inputs:
+      text_prompt: "a small bird"
+      output_format: glb
+
+  trellis_text_mesh_painting:
+    module: adapters.trellis_adapter
+    class: TrellisTextMeshPaintingAdapter
+    timeout_sec: 2400
+    inputs:
+      mesh_path: "{mesh}"
+      text_prompt: "rusty metal goblin"
+      output_format: glb
+
+  hunyuan3dv21_image_to_raw_mesh:
+    module: adapters.hunyuan3d_adapter_v21
+    class: Hunyuan3DV21ImageToRawMeshAdapter
+    timeout_sec: 1800
+    inputs:
+      image_path: "{image}"
+      output_format: glb
+
+  ultrashape_image_to_raw_mesh:
+    module: adapters.ultrashape_adapter
+    class: UltraShapeImageToRawMeshAdapter
+    timeout_sec: 2400
+    inputs:
+      image_path: "{image}"
+      output_format: glb
+
+  trellis_image_to_textured_mesh:
+    module: adapters.trellis_adapter
+    class: TrellisImageToTexturedMeshAdapter
+    timeout_sec: 2400
+    inputs:
+      image_path: "{image}"
+      output_format: glb
+
+  trellis2_image_to_textured_mesh:
+    module: adapters.trellis2_adapter
+    class: Trellis2ImageToTexturedMeshAdapter
+    timeout_sec: 3600
+    inputs:
+      image_path: "{fox_image}"
+      output_format: glb
+      seed: 42
+      texture_size: 1024
+      decimation_target: 100000
+
+  pixal3d_image_to_textured_mesh:
+    module: adapters.pixal3d_adapter
+    class: Pixal3DImageToTexturedMeshAdapter
+    timeout_sec: 3600
+    inputs:
+      image_path: "{fox_image}"
+      output_format: glb
+      model_parameters:
+        low_vram: true
+        resolution: 1024
+        seed: 42
+
+  hunyuan3dv21_image_to_textured_mesh:
+    module: adapters.hunyuan3d_adapter_v21
+    class: Hunyuan3DV21ImageToTexturedMeshAdapter
+    timeout_sec: 2400
+    inputs:
+      image_path: "{image}"
+      output_format: glb
+
+  trellis_image_mesh_painting:
+    module: adapters.trellis_adapter
+    class: TrellisImageMeshPaintingAdapter
+    timeout_sec: 2400
+    inputs:
+      mesh_path: "{mesh}"
+      image_path: "{image}"
+      output_format: glb
+
+  trellis2_image_mesh_painting:
+    module: adapters.trellis2_adapter
+    class: Trellis2ImageMeshPaintingAdapter
+    timeout_sec: 3600
+    inputs:
+      mesh_path: "{mesh}"
+      image_path: "{image}"
+      output_format: glb
+
+  hunyuan3dv21_image_mesh_painting:
+    module: adapters.hunyuan3d_adapter_v21
+    class: Hunyuan3DV21ImageMeshPaintingAdapter
+    timeout_sec: 2400
+    inputs:
+      mesh_path: "{mesh}"
+      image_path: "{image}"
+      output_format: glb
+
+  opennexus_image_to_world:
+    module: adapters.image_to_world_adapter
+    class: ImageToWorldAdapter
+    timeout_sec: 3600
+    inputs:
+      image_path: "{image}"
+      prop_regions: []
+      splat_parameters:
+        seed: 42
+        steps: 12
+        num_gaussians: 65536
+
+  triposplat_image_to_splat:
+    module: adapters.triposplat_adapter
+    class: TripoSplatImageToSplatAdapter
+    timeout_sec: 1800
+    inputs:
+      image_path: "{image}"
+      output_format: ply
+
+  colmap_3dgs_reconstruct:
+    module: adapters.colmap_3dgs_adapter
+    class: Colmap3dgsReconstructAdapter
+    timeout_sec: 1800
+    inputs:
+      image_path: "{image}"
+      output_format: ply
+
+  worldmirror2_reconstruct:
+    module: adapters.worldmirror2_adapter
+    class: WorldMirror2ReconstructAdapter
+    timeout_sec: 2400
+    inputs:
+      image_path: "{image}"
+      output_format: ply
+
+  p3sam_mesh_segmentation:
+    module: adapters.p3sam_adapter
+    class: P3SAMSegmentationAdapter
+    timeout_sec: 3600
+    inputs:
+      mesh_path: "{mesh}"
+      output_format: glb
+
+  unirig_auto_rig:
+    module: adapters.unirig_adapter
+    class: UniRigAdapter
+    timeout_sec: 1800
+    inputs:
+      mesh_path: "{mesh}"
+      rig_mode: full
+      output_format: glb
+
+  skintokens_auto_rig:
+    module: adapters.skintokens_adapter
+    class: SkinTokensAdapter
+    timeout_sec: 2400
+    inputs:
+      mesh_path: "{mesh}"
+      rig_mode: full
+      output_format: glb
+
+  creature_template_auto_rig:
+    module: adapters.creature_template_adapter
+    class: CreatureTemplateAdapter
+    timeout_sec: 900
+    inputs:
+      mesh_path: "{mesh_quadruped}"
+      rig_mode: creature_template
+      creature_template_id: fox
+      output_format: glb
+
+  instant_meshes_retopology:
+    module: adapters.instant_meshes_adapter
+    class: InstantMeshesRetopologyAdapter
+    timeout_sec: 900
+    inputs:
+      mesh_path: "{mesh}"
+      output_format: obj
+      target_vertex_count: 5000
+
+  xatlas_uv_unwrapping:
+    module: adapters.xatlas_adapter
+    class: XatlasUVUnwrappingAdapter
+    timeout_sec: 600
+    inputs:
+      mesh_path: "{mesh}"
+      output_format: obj
+
+  voxhammer_text_mesh_editing:
+    module: adapters.voxhammer_adapter
+    class: VoxHammerTextMeshEditingAdapter
+    timeout_sec: 5400
+    inputs:
+      mesh_path: "{mesh_dragon}"
+      mask_type: bbox
+      mask_center: [0, 0, 0]
+      mask_params:
+        dimensions: [0.5, 0.5, 0.5]
+      source_prompt: dragon
+      target_prompt: stone dragon
+      num_views: 50
+      resolution: 256
+
+  voxhammer_image_mesh_editing:
+    module: adapters.voxhammer_adapter
+    class: VoxHammerImageMeshEditingAdapter
+    timeout_sec: 5400
+    inputs:
+      mesh_path: "{mesh_dragon}"
+      mask_type: bbox
+      mask_center: [0, 0, 0]
+      mask_params:
+        dimensions: [0.5, 0.5, 0.5]
+      source_image_path: "{vox_src}"
+      target_image_path: "{vox_tgt}"
+      mask_image_path: "{vox_mask}"
+      num_views: 50
+      resolution: 256
+
+  kimodo_text_to_motion:
+    module: adapters.kimodo_adapter
+    class: KimodoTextToMotionAdapter
+    timeout_sec: 3600
+    inputs:
+      text_prompt: "a person walks forward slowly"
+      duration: 2.0
+      diffusion_steps: 20
+      seed: 42
+      output_format: studio_motion
