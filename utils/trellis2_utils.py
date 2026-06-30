@@ -191,16 +191,46 @@ class Trellis2Runner:
         
         # Load image
         image = Image.open(image_path)
-        
-        # Set random seed if provided
-        if seed is not None:
-            torch.manual_seed(seed)
+
+        run_seed = 42 if seed is None else seed
+        retry_seeds = [run_seed]
+        if seed is None:
+            retry_seeds.extend([123, 456])
+
+        last_error = None
+        mesh = None
+        for attempt, run_seed in enumerate(retry_seeds):
+            torch.manual_seed(run_seed)
             if torch.cuda.is_available():
-                torch.cuda.manual_seed(seed)
-        
-        # Run generation pipeline
-        logger.info(f"Generating 3D mesh from image: {image_path}")
-        mesh = self.image_to_3d_pipeline.run(image)[0]
+                torch.cuda.manual_seed(run_seed)
+
+            logger.info(
+                "Generating 3D mesh from image: %s (seed=%s, attempt=%s/%s)",
+                image_path,
+                run_seed,
+                attempt + 1,
+                len(retry_seeds),
+            )
+            try:
+                mesh = self.image_to_3d_pipeline.run(image, seed=run_seed)[0]
+                break
+            except (RuntimeError, ValueError) as exc:
+                msg = str(exc)
+                empty_structure = (
+                    "numel() == 0" in msg
+                    or "no occupied voxels" in msg
+                )
+                if empty_structure and attempt + 1 < len(retry_seeds):
+                    logger.warning(
+                        "TRELLIS.2 produced empty sparse structure with seed=%s; retrying",
+                        run_seed,
+                    )
+                    last_error = exc
+                    continue
+                raise
+
+        if mesh is None:
+            raise last_error or RuntimeError("TRELLIS.2 mesh generation failed")
         
         # Simplify mesh (nvdiffrast has a limit of 16777216 faces)
         mesh.simplify(16777216)

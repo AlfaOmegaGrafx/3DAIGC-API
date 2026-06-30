@@ -7,12 +7,44 @@ load models without direct imports.
 """
 
 import importlib
+import inspect
 import logging
 from typing import Any, Dict, Optional
 
 from ..models.base import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_init_params(model_class: type, init_params: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop config-only keys that are not accepted by the adapter constructor."""
+    try:
+        sig = inspect.signature(model_class.__init__)
+    except (TypeError, ValueError):
+        return init_params
+
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return init_params
+
+    allowed = {
+        name
+        for name, param in sig.parameters.items()
+        if name != "self"
+        and param.kind
+        in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+    }
+    filtered = {key: value for key, value in init_params.items() if key in allowed}
+    dropped = set(init_params) - set(filtered)
+    if dropped:
+        logger.debug(
+            "Filtered init_params for %s: dropped %s",
+            getattr(model_class, "__name__", model_class),
+            sorted(dropped),
+        )
+    return filtered
 
 
 class ModelFactory:
@@ -88,6 +120,11 @@ class ModelFactory:
             "module": "adapters.skintokens_adapter",
             "class": "SkinTokensAdapter",
         },
+        # Mesh2Motion creature template (Blender, no GPU)
+        "creature_template_auto_rig": {
+            "module": "adapters.creature_template_adapter",
+            "class": "CreatureTemplateAdapter",
+        },
         # FastMesh adapters
         "fastmesh_v1k_retopology": {
             "module": "adapters.fastmesh_adapter",
@@ -138,6 +175,15 @@ class ModelFactory:
         "kimodo_text_to_motion": {
             "module": "adapters.kimodo_adapter",
             "class": "KimodoTextToMotionAdapter",
+        },
+        # Krea 2 text-to-image (local open weights via diffusers — no Krea API)
+        "krea2_turbo_text_to_image": {
+            "module": "adapters.krea2_adapter",
+            "class": "Krea2TurboTextToImageAdapter",
+        },
+        "krea2_raw_text_to_image": {
+            "module": "adapters.krea2_adapter",
+            "class": "Krea2RawTextToImageAdapter",
         },
         # VoxHammer adapters
         "voxhammer_text_mesh_editing": {
@@ -248,6 +294,7 @@ class ModelFactory:
                 else:
                     init_params.setdefault("model_path", mp)
 
+            init_params = _filter_init_params(model_class, init_params)
             model_instance = model_class(**init_params)
 
             # Verify the model has the expected properties
@@ -553,6 +600,17 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
         }
     )
 
+    # Creature template rig (Blender / Mesh2Motion — no GPU)
+    configs.update(
+        {
+            "creature_template_auto_rig": ModelFactory.create_model_config(
+                model_id="creature_template_auto_rig",
+                feature_type="auto_rig",
+                vram_requirement=0,
+            )
+        }
+    )
+
     # FastMesh models
     configs.update(
         {
@@ -665,6 +723,22 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 feature_type="text_to_motion",
                 vram_requirement=8192,
             )
+        }
+    )
+
+    # Krea 2 text-to-image (local weights)
+    configs.update(
+        {
+            "krea2_turbo_text_to_image": ModelFactory.create_model_config(
+                model_id="krea2_turbo_text_to_image",
+                feature_type="text_to_image",
+                vram_requirement=32768,
+            ),
+            "krea2_raw_text_to_image": ModelFactory.create_model_config(
+                model_id="krea2_raw_text_to_image",
+                feature_type="text_to_image",
+                vram_requirement=32768,
+            ),
         }
     )
 

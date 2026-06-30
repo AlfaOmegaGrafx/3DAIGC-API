@@ -2,9 +2,37 @@
 # Available models for each feature
 # Use the actual adapter model IDs as defined in the adapter classes
 #
+# VERIFY: every enabled model MUST have a profile in config/verify_profiles.yaml
+#         Run: python scripts/verify_registry.py --validate
+#
 # COMMERCIAL USE (hard prerequisite for Open3DStudio):
 #   See docs/MODEL_LICENSES.md before enabling any route.
 #   Routes disabled below are NON-COMMERCIAL upstream licenses (NVIDIA / S-Lab / Bria).
+
+# text-to-image (local open weights — no Krea cloud API)
+text_to_image:
+  krea2_turbo_text_to_image:
+    vram_requirement: 32768  # MB — 12B DiT + Qwen3-VL-4B; ~24GB+ weights
+    supported_inputs: ["text"]
+    supported_outputs: ["png", "webp"]
+    model_path: "pretrained/krea/Krea-2-Turbo"
+    enabled: true
+    max_workers: 1
+    worker_load_timeout_sec: 1800
+    license_note: "Krea 2 Community License — CONDITIONAL commercial (<$1M revenue + content filters). See docs/MODEL_LICENSES.md."
+    init_params:
+      hf_model_id: "krea/Krea-2-Turbo"
+
+  krea2_raw_text_to_image:
+    vram_requirement: 32768  # MB
+    supported_inputs: ["text"]
+    supported_outputs: ["png", "webp"]
+    model_path: "pretrained/krea/Krea-2-Raw"
+    enabled: false  # undistilled base — train LoRAs here, run on Turbo; not default inference
+    max_workers: 1
+    license_note: "Same Krea 2 Community License as Turbo."
+    init_params:
+      hf_model_id: "krea/Krea-2-Raw"
 
 # text-conditioned geometry/geometry+texture generation
 text_to_textured_mesh:
@@ -56,19 +84,28 @@ image_to_raw_mesh:
 image_to_textured_mesh:
   trellis_image_to_textured_mesh:
     vram_requirement: 11776  # MB
-    supported_inputs: ["image"]
+    supported_inputs: ["image", "multiview_image"]
     supported_outputs: ["glb", "obj"]
     model_path: "thirdparty/TRELLIS"
     enabled: true
     max_workers: 1
+    init_params:
+      supports_multiview_mesh: true
+      min_views_for_multiview: 2
+      max_views_for_multiview: 8
 
   trellis2_image_to_textured_mesh:
     vram_requirement: 20480  # MB — GB10 UMA often reports ~21GB free; 23.5GB gate blocked jobs
-    supported_inputs: ["image"]
+    supported_inputs: ["image", "multiview_image"]
     supported_outputs: ["glb", "obj"]
     model_path: "thirdparty/TRELLIS.2"
     enabled: true
     max_workers: 1
+    init_params:
+      supports_multiview_mesh: true
+      multiview_delegate_model: trellis_image_to_textured_mesh
+      min_views_for_multiview: 2
+      max_views_for_multiview: 8
 
   pixal3d_image_to_textured_mesh:
     vram_requirement: 20480  # MB — pixel-aligned PBR; use low_vram on 16GB GPUs
@@ -184,6 +221,14 @@ auto_rig:
     max_workers: 1
     init_params:
       auto_download_checkpoints: true
+
+  creature_template_auto_rig:
+    vram_requirement: 0  # Blender CPU only
+    supported_inputs: ["obj", "glb", "gltf", "fbx"]
+    supported_outputs: ["glb"]
+    model_path: "assets/creature_autorig"
+    enabled: true
+    max_workers: 2
 
 # mesh retopology
 mesh_retopology:

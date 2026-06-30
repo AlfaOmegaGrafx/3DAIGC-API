@@ -1,0 +1,35 @@
+---
+description: Krea 2 local text-to-image ops on DGX — setup, load failures, restart; agents run everything
+alwaysApply: true
+---
+
+# Krea 2 text-to-image (3DAIGC-API / DGX)
+
+Read **`memory-bank/krea2-text-to-image-ops.md`** when Krea, text-to-image, or `krea2_turbo_text_to_image` is mentioned.
+
+## Agent must execute (not delegate)
+
+On Krea setup, load failure, or job error:
+
+1. `grep` / `tail logs/scheduler.log` for worker load vs inference traceback
+2. `./venv/bin/python -c "from diffusers import Krea2Pipeline; print('OK')"` — if fail: `bash scripts/setup_krea2.sh --deps-only`
+3. `bash scripts/restart_services.sh` after setup or `adapters/krea2_adapter.py` changes
+4. Verify weights: `test -d pretrained/krea/Krea-2-Turbo`
+5. Smoke: `curl` POST text-to-image with 512² before declaring fixed
+
+**Do not** reply with "run this script" — execute it (`agent-run-instructions.mdc`).
+
+## Invariants (do not revert)
+
+| Setting | Value |
+|---------|-------|
+| Setup script | `scripts/setup_krea2.sh` (diffusers git pin) |
+| Weights | `pretrained/krea/Krea-2-Turbo` |
+| Adapter | `adapters/krea2_adapter.py` — `rope_parameters` → `rope_scaling`; Qwen3-VL tokenizer from hub |
+| Post-pip | `bash scripts/post_pip_guard.sh` after any venv pip change |
+
+Operator table: OpenNexus `docs/scripts-cheatsheet.md` §7a.
+
+## Regression gate
+
+After Krea or venv changes: confirm Kimodo still listed in `/api/v1/system/models` and run `post_pip_guard.sh` — do not break other enabled models.
