@@ -6,6 +6,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p logs run
 
+bash "$ROOT/scripts/ensure_redis.sh"
+bash "$ROOT/scripts/check_scheduler_continuity.sh"
+
 if [[ -f run/api.pid ]] && kill -0 "$(cat run/api.pid)" 2>/dev/null; then
   echo "API already running (pid $(cat run/api.pid))."
   echo "Stop first: bash scripts/stop_services.sh"

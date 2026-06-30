@@ -446,6 +446,7 @@ assets/wheels/torch*
 # Local Python environment (never commit)
 venv/
 .venv/
+.venv-*/
 env/
 .Python
 
@@ -467,3 +468,6 @@ restart_last_pid.txt
 
 # User uploads (local job inputs; never commit)
 uploads/
+
+# Moat / internal strategy (never commit)
+memory-bank/creature-rig-pipeline-plan.md

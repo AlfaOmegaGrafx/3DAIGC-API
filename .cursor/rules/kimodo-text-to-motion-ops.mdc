@@ -11,11 +11,12 @@ Read **`memory-bank/kimodo-text-to-motion-ops.md`** at task start when Kimodo, t
 
 On Kimodo failure or setup — **same global rule as all tasks** (see `agent-run-instructions.mdc`):
 
-1. `grep` / `tail logs/scheduler.log` for job id, worker load, traceback
-2. `curl` job history + submit test job if verifying fix
-3. `bash scripts/prefetch_kimodo_deps.sh` if Llama cache incomplete
-4. `bash scripts/restart_services.sh` after config changes
-5. Verify 4 Llama shards: `model-00001-of-00004` … `model-00004-of-00004`
+1. `bash scripts/verify_api_stack.sh` (Redis + scheduler continuity + health)
+2. `grep` / `tail logs/scheduler.log` for job id, worker load, traceback
+3. `curl` job history + submit test job if verifying fix
+4. `bash scripts/prefetch_kimodo_deps.sh` if Llama cache incomplete
+5. `bash scripts/restart_services.sh` after config changes
+6. Verify 4 Llama shards: `model-00001-of-00004` … `model-00004-of-00004`
 
 **Do not** reply with "run this script" — execute it (global rule: `agent-run-instructions.mdc`).
 
