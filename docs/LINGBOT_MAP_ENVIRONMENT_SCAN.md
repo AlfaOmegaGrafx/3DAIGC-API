@@ -1,0 +1,161 @@
+# Galaxy XR walk → digital twin (LingBot-Map)
+
+Physical-replica metaverse anchoring: capture with **outward-facing** cameras while walking, reconstruct a world package, and apply **1:1 meter** scale.
+
+## Status
+
+| Piece | Status |
+|-------|--------|
+| Default image-to-world (TripoSplat) | Unchanged |
+| `POST /api/v1/world-generation/environment-scan` | Added |
+| `POST /api/v1/file-upload/video` | Added |
+| Metric calibration (`metric_scale.py`) | Added |
+| LingBot-Map weights / runtime | **Optional** — `bash scripts/install_lingbot_map.sh` |
+| Phase A: point cloud → isotropic Gaussian (Spark) | **Shipped** — `refine_to_3dgs` / `scripts/refine_env_scan_to_3dgs.py` |
+| Phase B: gsplat train on exported COLMAP | **Next** — dataset under `gs_dataset/` after Phase A |
+
+## Install (DGX)
+
+```bash
+cd /home/sifr/3DAIGC-API
+bash scripts/install_lingbot_map.sh
+# restart API workers after install
+```
+
+Refs: [LingBot-Map](https://github.com/Robbyant/lingbot-map), [paper](https://arxiv.org/html/2604.14141v2), [weights](https://huggingface.co/robbyant/lingbot-map), [project](https://technology.robbyant.com/lingbot-map).
+
+## Capture (Galaxy XR)
+
+1. Walk the space with **world-facing** cameras (steady pace, revisit corners).
+2. Record / export a video (or ≥3 ordered frames).
+3. Upload: `POST /api/v1/file-upload/video` → `video_file_id`.
+4. Measure one real length (door width, wall span) in **meters**.
+
+## 1:1 scale (required for physical replica)
+
+Monocular recon is unitless. Pass `metric_calibration` so the twin matches reality:
+
+```json
+{
+  "video_file_id": "…",
+  "world_name": "Studio walk",
+  "model_preference": "lingbot_map_environment_scan",
+  "metric_calibration": {
+    "mode": "reference_length",
+    "true_meters": 0.9,
+    "recon_length": 0.45
+  }
+}
+```
+
+| Mode | Fields | When |
+|------|--------|------|
+| `reference_length` | `true_meters`, `recon_length` | Best: measure a door/wall in recon UI later, or after a dry run |
+| `two_points` | `true_meters`, `point_a`, `point_b` | Two 3D points spanning a known length |
+| `player_height` | `recon_height`, optional `player_height_meters` (default 1.6) | Vertical span ≈ person height |
+| `auto_bbox` | `true_meters` only | Uses point-cloud bbox diagonal as `recon_length` (approximate — prefer door/wall) |
+
+Applied as `environment.transform.scale` (uniform or horizontal-only `[sx,1,sz]`) in `world.manifest.json`. Metadata records `coordinate_units: "meters"` and `one_to_one: true`.
+
+### Orientation processing (required)
+
+After LingBot reconstructs, every env-scan applies this order:
+
+1. **Gravity → +Y** (floor RANSAC when camera “up” is inverted/unreliable; else camera poses)
+2. **Ceiling/floor check** — if the densest slab is on top, **Y-flip**
+3. **Seat on Y=0**
+4. **X-mirror** — OpenCV/LingBot left↔right vs Three.js
+5. Optional **horizontal metric scale** for door width (`axis: horizontal`) so height stays correct
+
+Broken camera averages that point near world **-Y** are flipped before align (Galaxy + windowed poses).
+
+## API
+
+```http
+POST /api/v1/world-generation/environment-scan
+Content-Type: application/json
+
+{
+  "video_file_id": "<id>",
+  "world_name": "Living room",
+  "metric_calibration": {
+    "mode": "reference_length",
+    "true_meters": 2.4,
+    "recon_length": 1.2
+  },
+  "refine_to_3dgs": true
+}
+```
+
+Poll job → `world_manifest_url` / `world_base_url` like image-to-world.
+
+- Default: colored **point cloud** (`renderer: points`).
+- `refine_to_3dgs: true`: Phase A isotropic **Gaussian splat** (`renderer: spark`) + optional `gs_dataset/` for Phase B.
+
+## OpenNexus
+
+Task type **Environment scan** (optional). Default Image to World stays TripoSplat.
+Enable **Refine to 3DGS (Phase A)** when submitting if you want Spark Gaussians immediately.
+
+## 3DGS refinement (continue here)
+
+Point cloud first is intentional (fast, GB10-safe). Once the cloud looks right (gravity, left/right, metric door), convert:
+
+### Phase A — isotropic Gaussians from points (no train)
+
+Converts `environment.ply` (XYZRGB) → Spark PLY (`f_dc_*`, `opacity`, `scale_*`, `rot_*`). Keeps backup as `environment.points.ply`. Updates manifest to `gaussian_splat` / `spark`.
+
+**On a new scan:**
+
+```json
+{ "refine_to_3dgs": true, "...": "rest of environment-scan body" }
+```
+
+**On an existing world package (Office / previous jobs):**
+
+```bash
+cd /home/sifr/3DAIGC-API
+# use the API venv (has numpy / torch)
+source .venv/bin/activate   # or: source venv/bin/activate
+python scripts/refine_env_scan_to_3dgs.py \
+  outputs/worlds/<JOB_ID>
+```
+
+If the scan was run **after** camera export landed, the script also writes:
+
+| Path | Purpose |
+|------|---------|
+| `environment.points.ply` | XYZRGB backup |
+| `environment.ply` | Spark Gaussians |
+| `cameras_aligned.npz` | Gravity-aligned c2w + K |
+| `gs_dataset/images/` + `gs_dataset/sparse/0/*.txt` | COLMAP TXT for Phase B |
+
+Older jobs (pre-camera-export) still get Phase A Gaussians; re-run env-scan (or keep `_work/lingbot_out`) to get poses for Phase B.
+
+Code: `core/utils/lingbot_3dgs_refine.py`.
+
+### Phase B — densify with gsplat (next integration step)
+
+1. Confirm Phase A looks OK in OpenNexus / Galaxy (Spark path).
+2. Train on `gs_dataset/` (COLMAP TXT + images). Prefer the installed `gsplat` package; HY-World’s `world_gs_trainer.py` is a reference for export helpers (`gsplat.export_splats`).
+3. Suggested starter (adjust paths / iters):
+
+```bash
+# Example — wire a thin wrapper later; do not block on HY-World panorama assumptions
+python -m gsplat.examples.simple_trainer \
+  --data_dir outputs/worlds/<JOB_ID>/gs_dataset \
+  --result_dir outputs/worlds/<JOB_ID>/gs_train \
+  --data_factor 1
+```
+
+4. Export optimized PLY → replace `environment.ply`; set manifest `metadata.gaussian_phase` to `B_gsplat_trained`.
+5. Keep `environment.points.ply` and metric `transform.scale` unchanged.
+
+**Do not** full-batch `images.to(cuda)` for LingBot on GB10; Phase B training should use gsplat’s own dataloaders (per-view), not LingBot windowed inference.
+
+## Limitations
+
+- LingBot must be installed or jobs fail with an install hint (other models unaffected).
+- Default output is a **colored point cloud**; denser trained Gaussians are Phase B.
+- Absolute scale needs a measured real-world length — headset passthrough alone is not enough.
+- Phase A Gaussians are isotropic (same radius per point) — good for Spark load / XR preview, not final quality.

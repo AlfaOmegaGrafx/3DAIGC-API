@@ -49,10 +49,17 @@ else
 fi
 
 echo "=== health ==="
-if curl -sf "${API_BASE}/health" | python3 -m json.tool; then
-  :
-else
-  echo "ERROR: ${API_BASE}/health failed"
+health_ok=0
+for _ in $(seq 1 30); do
+  if curl -sf "${API_BASE}/health" | python3 -m json.tool >/dev/null 2>&1; then
+    curl -sf "${API_BASE}/health" | python3 -m json.tool
+    health_ok=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$health_ok" -ne 1 ]]; then
+  echo "ERROR: ${API_BASE}/health failed after wait"
   exit 1
 fi
 

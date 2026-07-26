@@ -1,0 +1,23 @@
+---
+description: LingBot env-scan gravity/orientation + Phase A 3DGS — do not regress
+globs: 3DAIGC-API/{core/utils/lingbot*,core/utils/metric_scale.py,adapters/lingbot*,api/routers/world_generation.py,docs/LINGBOT*}
+alwaysApply: false
+---
+
+# LingBot env-scan orientation — protected
+
+Read `memory-bank/lingbot-env-scan-orientation-protected-state.md` before editing gravity, metric scale, or 3DGS refine.
+
+## Order (required)
+
+1. Gravity → +Y (reject inverted camera-up; prefer floor when unreliable)
+2. Y-flip if densest slab is ceiling
+3. Seat Y=0
+4. X-mirror (left↔right)
+5. Horizontal door scale only when fixing width (`axis: horizontal`)
+
+## Forbidden
+
+- Trusting camera-up near world −Y without flip
+- Uniform Y scale for door-width calibration
+- Dropping X-mirror or densest-slab Y-flip

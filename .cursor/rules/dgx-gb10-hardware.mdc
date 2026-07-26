@@ -1,0 +1,56 @@
+---
+description: DGX Spark GB10 hardware facts — always probe live load, never generic GPU assumptions
+alwaysApply: true
+---
+
+# DGX Spark (GB10) — hardware & capacity checks
+
+**Host:** DGX Spark, `aarch64`, primary backend for 3DAIGC-API (`:7842`).
+
+## Fixed specs (do not guess from generic "24GB GPU" blogs)
+
+| Resource | Actual |
+|----------|--------|
+| GPU | **NVIDIA GB10** (unified memory / UMA) |
+| Unified memory pool | **~128 GB** (~121 Gi system RAM = same pool for CPU+GPU) |
+| Storage | **~3.7 TB** NVMe (`/`), typically **2.7+ TB free** |
+| CUDA | cu128 / driver 580.x |
+| `nvidia-smi` memory column | Often **"Not Supported"** on GB10 — do not rely on it |
+
+## UMA reporting quirk (critical for scheduling)
+
+- `torch.cuda.mem_get_info()` **free** is often **~8–21 GB** even when **100+ GB** is available for compute.
+- This is why `models.yaml` mentions "GB10 UMA often reports ~21GB free" — a **scheduler/reporting bug**, not physical capacity.
+- Workaround lives in `core/scheduler/gpu_monitor.py` (`_uma_underreports_free_vram`).
+
+## Mandatory before capacity advice or blocking a model
+
+**Always probe live state** — never cite generic VRAM tables:
+
+```bash
+# Unified pool (authoritative total)
+./venv/bin/python3 -c "import torch; f,t=torch.cuda.mem_get_info(0); print(f'free={f//2**20}MB total={t//2**20}MB device={torch.cuda.get_device_name(0)}')"
+
+# System RAM (same pool on UMA)
+free -h
+
+# Disk
+df -h /home/sifr
+
+# GPU processes (when nvidia-smi works)
+nvidia-smi
+```
+
+Interpret **total** (~128 GB) and **`MemAvailable`** as headroom — not `mem_get_info` free alone.
+
+## Model sizing on this box
+
+- Krea 2 Turbo (~32 GB gate in `models.yaml`): **fits easily** with typical ~12 Gi system use.
+- Prefer **Turbo** for inference; Raw disabled by default (LoRA training base).
+- Krea 2 runs **local open weights only** — no `api.krea.ai` dependency.
+- **LingBot env-scan:** `max_frames` up to **600** is supported via CPU-resident tensors + windowed inference (`lingbot_map_pipeline._run_lingbot_demo`). Never `.to(cuda)` the full image batch — that hard-locked GB10 (2026-07-24).
+
+## Never
+
+- Tell the user they only have "21 GB VRAM" on GB10.
+- Block or warn based on discrete-GPU assumptions (4090, A100, etc.) without running the probes above.

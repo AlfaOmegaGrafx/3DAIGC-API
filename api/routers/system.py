@@ -965,8 +965,21 @@ async def download_world_asset(job_id: str, asset_path: str, request: Request):
         result = job_status.get("result", {}) or {}
         world_dir = result.get("world_directory")
         if not world_dir:
+            # Rehydrated / legacy jobs may only have on-disk outputs/worlds/{job_id}
+            fallback = Path("outputs") / "worlds" / job_id
+            if not fallback.is_dir():
+                fallback = Path("/home/sifr/3DAIGC-API/outputs/worlds") / job_id
+            if fallback.is_dir() and (
+                (fallback / "environment.ply").is_file()
+                or (fallback / "world.manifest.json").is_file()
+            ):
+                world_dir = str(fallback.resolve())
+        if not world_dir:
             raise HTTPException(status_code=404, detail="Job has no world package")
         base = Path(world_dir).resolve()
+        if not base.is_absolute():
+            # Relative paths are against API CWD (usually 3DAIGC-API root)
+            base = (Path.cwd() / world_dir).resolve()
         target = (base / asset_path).resolve()
         if not str(target).startswith(str(base)):
             raise HTTPException(status_code=400, detail="Invalid asset path")

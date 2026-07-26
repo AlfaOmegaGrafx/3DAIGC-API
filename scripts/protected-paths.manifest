@@ -54,3 +54,22 @@ scripts/reconcile-api-to-surface.sh
 scripts/lock-it-in.sh
 scripts/protected-paths-lib.sh
 scripts/protected-paths.manifest
+
+# --- LingBot env-scan orientation + Phase A 3DGS ---
+core/utils/lingbot_map_pipeline.py
+core/utils/lingbot_3dgs_refine.py
+core/utils/metric_scale.py
+adapters/lingbot_map_adapter.py
+api/routers/world_generation.py
+docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md
+scripts/refine_env_scan_to_3dgs.py
+scripts/install_lingbot_map.sh
+scripts/ensure_lingbot_map.sh
+tests/test_lingbot_map_pipeline_budget.py
+tests/test_lingbot_3dgs_refine.py
+tests/test_lingbot_env_scan_budget.py
+tests/test_metric_scale.py
+memory-bank/lingbot-env-scan-orientation-protected-state.md
+.cursor/rules/lingbot-env-scan-orientation-protected.mdc
+.cursor/rules/dgx-gb10-hardware.mdc
+scripts/verify_lingbot_env_scan_orientation.sh

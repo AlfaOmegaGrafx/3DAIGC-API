@@ -120,6 +120,11 @@ class ModelFactory:
             "module": "adapters.skintokens_adapter",
             "class": "SkinTokensAdapter",
         },
+        # Appearance clothing fit (Blender, no GPU / no UniRig)
+        "appearance_component_auto_rig": {
+            "module": "adapters.appearance_component_adapter",
+            "class": "AppearanceComponentAdapter",
+        },
         # Mesh2Motion creature template (Blender, no GPU)
         "creature_template_auto_rig": {
             "module": "adapters.creature_template_adapter",
@@ -170,6 +175,10 @@ class ModelFactory:
         "opennexus_image_to_world": {
             "module": "adapters.image_to_world_adapter",
             "class": "ImageToWorldAdapter",
+        },
+        "lingbot_map_environment_scan": {
+            "module": "adapters.lingbot_map_adapter",
+            "class": "LingBotMapEnvironmentScanAdapter",
         },
         # Kimodo text-to-motion (SOMA → studio_motion.json for VRM)
         "kimodo_text_to_motion": {
@@ -600,6 +609,17 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
         }
     )
 
+    # Appearance clothing → VRM slot fit (Blender only)
+    configs.update(
+        {
+            "appearance_component_auto_rig": ModelFactory.create_model_config(
+                model_id="appearance_component_auto_rig",
+                feature_type="auto_rig",
+                vram_requirement=0,
+            )
+        }
+    )
+
     # Creature template rig (Blender / Mesh2Motion — no GPU)
     configs.update(
         {
@@ -711,7 +731,12 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 model_id="opennexus_image_to_world",
                 feature_type="image_to_world",
                 vram_requirement=20480,
-            )
+            ),
+            "lingbot_map_environment_scan": ModelFactory.create_model_config(
+                model_id="lingbot_map_environment_scan",
+                feature_type="environment_scan",
+                vram_requirement=16384,
+            ),
         }
     )
 

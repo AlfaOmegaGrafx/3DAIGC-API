@@ -134,3 +134,151 @@ async def image_to_world(
     except Exception as e:
         logger.error("Error scheduling image-to-world job: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class MetricCalibration(BaseModel):
+    """1:1 meter scale for physical-replica metaverse anchoring."""
+
+    mode: str = Field(
+        "reference_length",
+        description="reference_length | two_points | player_height | auto_bbox",
+    )
+    true_meters: Optional[float] = Field(
+        None,
+        description="Real-world length in meters (door width, wall span, player height)",
+    )
+    recon_length: Optional[float] = Field(
+        None,
+        description="Same length measured in reconstruction units (optional if two_points)",
+    )
+    recon_height: Optional[float] = Field(
+        None, description="For player_height mode: height in recon units"
+    )
+    player_height_meters: Optional[float] = Field(
+        1.6, description="Real player height (default 1.6 m)"
+    )
+    point_a: Optional[List[float]] = Field(None, description="3D point A in recon space")
+    point_b: Optional[List[float]] = Field(None, description="3D point B in recon space")
+
+
+class EnvironmentScanRequest(BaseModel):
+    """Galaxy XR / walk-video environment scan → metric world package (LingBot-Map)."""
+
+    video_path: Optional[str] = None
+    video_file_id: Optional[str] = None
+    frame_dir: Optional[str] = None
+    image_file_ids: Optional[List[str]] = Field(
+        None, description="Ordered walk frames (≥3) if not using video"
+    )
+    world_id: Optional[str] = None
+    world_name: Optional[str] = None
+    model_preference: str = Field(
+        "lingbot_map_environment_scan",
+        description="Environment scan model (default LingBot-Map)",
+    )
+    metric_calibration: Optional[MetricCalibration] = Field(
+        None,
+        description=(
+            "Required for 1:1 physical replica. Prefer measuring a door/wall: "
+            "mode=reference_length with true_meters + recon_length, or two_points."
+        ),
+    )
+    # Up to 600; long walks use CPU-resident + windowed LingBot inference (GB10-safe).
+    max_frames: int = Field(600, ge=3, le=600)
+    frame_stride: int = Field(1, ge=1, le=30)
+    refine_to_3dgs: bool = Field(
+        False,
+        description=(
+            "Phase A: convert colored point cloud → Spark-compatible isotropic "
+            "Gaussian PLY and export COLMAP (gs_dataset/) for Phase B gsplat train. "
+            "Point cloud kept as environment.points.ply."
+        ),
+    )
+
+    model_config = ConfigDict(protected_namespaces=("settings_",))
+
+
+@router.post("/environment-scan", response_model=MeshGenerationResponse)
+async def environment_scan(
+    request: EnvironmentScanRequest,
+    scheduler: MultiprocessModelScheduler = Depends(get_scheduler),
+    current_user=Depends(get_current_user_or_none),
+    file_store: Optional[FileStore] = Depends(get_file_store),
+):
+    """
+    Walk-scan a physical space (Galaxy XR outward cameras / phone video) into a
+    World Package with optional 1:1 metric scale for metaverse anchoring.
+
+    Does not change the default image-to-world (TripoSplat) path.
+    Requires LingBot-Map installed: ``bash scripts/install_lingbot_map.sh``.
+    """
+    try:
+        user_id = current_user.user_id if current_user else None
+        validate_model_preference(
+            request.model_preference, "environment_scan", scheduler
+        )
+
+        video_path = None
+        image_paths: List[str] = []
+
+        if request.video_file_id or request.video_path:
+            video_path = await process_file_input(
+                file_path=request.video_path,
+                file_id=request.video_file_id,
+                input_type="video",
+                file_store=file_store,
+            )
+        elif request.image_file_ids:
+            for fid in request.image_file_ids:
+                image_paths.append(
+                    await process_file_input(
+                        file_id=fid, input_type="image", file_store=file_store
+                    )
+                )
+        elif request.frame_dir:
+            pass
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide video_file_id / video_path, frame_dir, or image_file_ids (≥3)",
+            )
+
+        inputs: Dict[str, Any] = {
+            "world_id": request.world_id,
+            "world_name": request.world_name,
+            "max_frames": request.max_frames,
+            "frame_stride": request.frame_stride,
+            "refine_to_3dgs": request.refine_to_3dgs,
+            "metric_calibration": (
+                request.metric_calibration.model_dump(exclude_none=True)
+                if request.metric_calibration
+                else None
+            ),
+        }
+        if video_path:
+            inputs["video_path"] = video_path
+        if request.frame_dir:
+            inputs["frame_dir"] = request.frame_dir
+        if image_paths:
+            inputs["image_path"] = image_paths[0]
+            inputs["image_paths"] = image_paths
+
+        job_request = JobRequest(
+            feature="environment_scan",
+            inputs=inputs,
+            model_preference=request.model_preference,
+            priority=1,
+            metadata={"feature_type": "environment_scan"},
+            user_id=user_id,
+        )
+        job_id = await scheduler.schedule_job(job_request)
+        return MeshGenerationResponse(
+            job_id=job_id,
+            status="queued",
+            message="Environment scan job queued (LingBot-Map + metric scale)",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error scheduling environment-scan job: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e

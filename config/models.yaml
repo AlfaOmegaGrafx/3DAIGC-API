@@ -161,6 +161,17 @@ image_to_world:
     enabled: true
     max_workers: 1
 
+# Galaxy XR / walk-video environment scan → metric world package (LingBot-Map)
+# Optional: enable after `bash scripts/install_lingbot_map.sh`. Does not replace image_to_world.
+environment_scan:
+  lingbot_map_environment_scan:
+    vram_requirement: 16384
+    supported_inputs: ["video", "image"]
+    supported_outputs: ["json", "ply"]
+    model_path: "thirdparty/lingbot-map"
+    enabled: true
+    max_workers: 1
+
 # image-conditioned Gaussian splat generation (Spark.js / WebXR)
 image_to_splat:
   triposplat_image_to_splat:
@@ -221,6 +232,14 @@ auto_rig:
     max_workers: 1
     init_params:
       auto_download_checkpoints: true
+
+  appearance_component_auto_rig:
+    vram_requirement: 0  # Blender CPU — clothing → Appearance VRM slot
+    supported_inputs: ["obj", "glb", "gltf", "fbx", "vrm"]
+    supported_outputs: ["glb", "vrm"]
+    model_path: "assets/example_autorig"
+    enabled: true
+    max_workers: 2
 
   creature_template_auto_rig:
     vram_requirement: 0  # Blender CPU only
