@@ -3,6 +3,7 @@ World generation API — image → explorable splat environment + optional mesh 
 """
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -194,6 +195,34 @@ class EnvironmentScanRequest(BaseModel):
             "Point cloud kept as environment.points.ply."
         ),
     )
+    train_3dgs: bool = Field(
+        False,
+        description=(
+            "Phase B: after Phase A, train gsplat on gs_dataset/ and replace "
+            "environment.ply with optimized Gaussians (implies refine_to_3dgs). "
+            "Long-running on GB10 — prefer POST /train-3dgs on an existing world."
+        ),
+    )
+    train_3dgs_steps: int = Field(
+        7000,
+        ge=100,
+        le=50000,
+        description="Phase B training steps when train_3dgs is true",
+    )
+
+    model_config = ConfigDict(protected_namespaces=("settings_",))
+
+
+class Train3dgsRequest(BaseModel):
+    """Phase B only — train gsplat on an existing env-scan world with gs_dataset/."""
+
+    world_id: str = Field(..., description="Existing env-scan job id under outputs/worlds/")
+    max_steps: int = Field(7000, ge=100, le=50000)
+    data_factor: int = Field(4, ge=1, le=8)
+    max_images: Optional[int] = Field(
+        None, description="Optional image cap (even stride) for faster/smoke trains"
+    )
+    model_preference: str = Field("env_scan_gsplat_train")
 
     model_config = ConfigDict(protected_namespaces=("settings_",))
 
@@ -249,6 +278,8 @@ async def environment_scan(
             "max_frames": request.max_frames,
             "frame_stride": request.frame_stride,
             "refine_to_3dgs": request.refine_to_3dgs,
+            "train_3dgs": request.train_3dgs,
+            "train_3dgs_steps": request.train_3dgs_steps,
             "metric_calibration": (
                 request.metric_calibration.model_dump(exclude_none=True)
                 if request.metric_calibration
@@ -281,4 +312,61 @@ async def environment_scan(
         raise
     except Exception as e:
         logger.error("Error scheduling environment-scan job: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/train-3dgs", response_model=MeshGenerationResponse)
+async def train_env_scan_3dgs(
+    request: Train3dgsRequest,
+    scheduler: MultiprocessModelScheduler = Depends(get_scheduler),
+    current_user=Depends(get_current_user_or_none),
+):
+    """
+    Phase B gsplat train on an existing environment-scan world package.
+
+    Requires ``outputs/worlds/<world_id>/gs_dataset/`` from Phase A (``refine_to_3dgs``).
+    """
+    try:
+        user_id = current_user.user_id if current_user else None
+        world_root = Path("outputs") / "worlds" / request.world_id
+        if not world_root.is_dir():
+            raise HTTPException(
+                status_code=404, detail=f"World not found: {request.world_id}"
+            )
+        if not (world_root / "gs_dataset").is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail="Missing gs_dataset/ — run Phase A refine_to_3dgs first",
+            )
+
+        validate_model_preference(
+            request.model_preference, "environment_scan", scheduler
+        )
+        inputs: Dict[str, Any] = {
+            "world_id": request.world_id,
+            "world_directory": str(world_root),
+            "max_steps": request.max_steps,
+            "data_factor": request.data_factor,
+        }
+        if request.max_images is not None:
+            inputs["max_images"] = request.max_images
+
+        job_request = JobRequest(
+            feature="environment_scan",
+            inputs=inputs,
+            model_preference=request.model_preference,
+            priority=1,
+            metadata={"feature_type": "environment_scan", "phase": "B_gsplat"},
+            user_id=user_id,
+        )
+        job_id = await scheduler.schedule_job(job_request)
+        return MeshGenerationResponse(
+            job_id=job_id,
+            status="queued",
+            message=f"Phase B gsplat train queued for world {request.world_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error scheduling train-3dgs job: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e

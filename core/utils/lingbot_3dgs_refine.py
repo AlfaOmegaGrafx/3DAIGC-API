@@ -217,6 +217,23 @@ def export_colmap_text_from_lingbot(
     w, h = int(image_size[0]), int(image_size[1])
 
     n_img = min(len(frames), int(ext.shape[0]))
+
+    # Always persist matrix poses. Gravity X-mirror yields det(R)=-1, which
+    # cannot be represented as a COLMAP quaternion (silent corruption → muddy 3DGS).
+    poses = np.zeros((n_img, 4, 4), dtype=np.float32)
+    improper = 0
+    for i in range(n_img):
+        c2w = ext[i]
+        if c2w.shape == (3, 4):
+            M = np.eye(4, dtype=np.float64)
+            M[:3, :4] = c2w
+        else:
+            M = np.asarray(c2w, dtype=np.float64)
+        poses[i] = M.astype(np.float32)
+        if float(np.linalg.det(M[:3, :3])) < 0.0:
+            improper += 1
+    np.save(out_dir / "poses_c2w.npy", poses)
+
     # cameras.txt — single PINHOLE
     (sparse / "cameras.txt").write_text(
         "# Camera list with one line of data per camera:\n"
@@ -225,29 +242,32 @@ def export_colmap_text_from_lingbot(
         encoding="utf-8",
     )
 
-    # images.txt — COLMAP stores WORLD-TO-CAMERA quaternion + translation
+    # images.txt — COLMAP stores WORLD-TO-CAMERA quaternion + translation.
+    # When poses are improper (X-mirrored LingBot), write identity placeholders and
+    # rely on poses_c2w.npy for training (see dataset_meta.poses_source).
     lines = [
         "# Image list with two lines of data per image:",
         "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME",
         "# POINTS2D[] as (X, Y, POINT3D_ID)",
+        "# NOTE: If poses are improper (det=-1), quats here are NOT authoritative — use ../poses_c2w.npy",
     ]
     for i in range(n_img):
-        c2w = ext[i]
-        if c2w.shape == (3, 4):
-            M = np.eye(4)
-            M[:3, :4] = c2w
-        else:
-            M = c2w
+        M = poses[i].astype(np.float64)
         w2c = np.linalg.inv(M)
         R = w2c[:3, :3]
         t = w2c[:3, 3]
-        # rotation matrix → quaternion (qw,qx,qy,qz)
-        qw, qx, qy, qz = _rotmat_to_quat(R)
         src = frames[i]
         name = f"{i:06d}{src.suffix.lower()}"
         dest = images_out / name
         if not dest.exists():
             shutil.copy2(src, dest)
+        if float(np.linalg.det(R)) < 0.0:
+            # Placeholder: keep translation, identity rotation (trainer ignores this).
+            qw, qx, qy, qz = 1.0, 0.0, 0.0, 0.0
+        else:
+            qw, qx, qy, qz = _rotmat_to_quat(R)
+            n = math.sqrt(qw * qw + qx * qx + qy * qy + qz * qz) or 1.0
+            qw, qx, qy, qz = qw / n, qx / n, qy / n, qz / n
         lines.append(
             f"{i + 1} {qw:.8f} {qx:.8f} {qy:.8f} {qz:.8f} "
             f"{t[0]:.8f} {t[1]:.8f} {t[2]:.8f} 1 {name}"
@@ -279,14 +299,31 @@ def export_colmap_text_from_lingbot(
         "num_points": int(pts.shape[0]),
         "image_size": [w, h],
         "source": "lingbot_map",
+        "poses_source": "poses_c2w.npy",
+        "improper_rotations": int(improper),
+        "colmap_images_txt_authoritative": improper == 0,
     }
     (out_dir / "dataset_meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    if improper:
+        logger.warning(
+            "Exported %d/%d improper c2w (det=-1). Phase B must use poses_c2w.npy — "
+            "COLMAP images.txt quats are placeholders.",
+            improper,
+            n_img,
+        )
     return sparse
 
 
 def _rotmat_to_quat(R: np.ndarray) -> Tuple[float, float, float, float]:
-    """Rotation matrix → (qw, qx, qy, qz)."""
+    """Rotation matrix → (qw, qx, qy, qz). Raises if ``det(R) < 0`` (reflection)."""
     m = np.asarray(R, dtype=np.float64)
+    det = float(np.linalg.det(m))
+    if det < 0.0:
+        raise ValueError(
+            f"Cannot convert improper rotation (det={det:.6f}) to quaternion. "
+            "LingBot X-mirror yields det=-1; Phase B must load poses_c2w.npy / "
+            "cameras_aligned.npz matrices instead of COLMAP images.txt quats."
+        )
     t = float(np.trace(m))
     if t > 0:
         s = math.sqrt(t + 1.0) * 2

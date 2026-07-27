@@ -21,3 +21,7 @@ Read `memory-bank/lingbot-env-scan-orientation-protected-state.md` before editin
 - Trusting camera-up near world −Y without flip
 - Uniform Y scale for door-width calibration
 - Dropping X-mirror or densest-slab Y-flip
+- Publishing Phase B without floater prune + Y=0 seat against the gravity ref cloud
+- Changing `source_geometry` away from detector-friendly `gaussian_from_point_cloud` for LingBot Spark loads
+- Dropping `prefer_floor=True` on LingBot demo gravity align (camera-extrinsic alone tilts rooms)
+- Re-enabling Phase B densify on LingBot poses or metric SVD bake without explicit user request

@@ -171,6 +171,13 @@ environment_scan:
     model_path: "thirdparty/lingbot-map"
     enabled: true
     max_workers: 1
+  env_scan_gsplat_train:
+    vram_requirement: 12288  # MB — Phase B gsplat train on gs_dataset/
+    supported_inputs: ["json"]
+    supported_outputs: ["json", "ply"]
+    model_path: "outputs/worlds"
+    enabled: true
+    max_workers: 1
 
 # image-conditioned Gaussian splat generation (Spark.js / WebXR)
 image_to_splat:
@@ -274,6 +281,22 @@ mesh_retopology:
     model_path: "thirdparty/instant-meshes/build/Instant Meshes"
     enabled: true
     max_workers: 1
+
+  autoremesher_retopology:
+    vram_requirement: 512  # MB (CPU CLI + offscreen GL; no GPU weights)
+    supported_inputs: ["obj", "glb", "ply", "stl"]
+    supported_outputs: ["obj", "glb", "ply"]
+    model_path: "thirdparty/autoremesher/autoremesher"
+    enabled: true
+    max_workers: 1
+
+  trimesh_decimate:
+    vram_requirement: 256  # MB (CPU; trimesh quadric, no binary)
+    supported_inputs: ["obj", "glb", "ply", "stl"]
+    supported_outputs: ["obj", "glb", "ply"]
+    model_path: "trimesh"
+    enabled: true
+    max_workers: 2
 
 # UV unwrapping
 uv_unwrapping:

@@ -154,6 +154,16 @@ class ModelFactory:
             "module": "adapters.instant_meshes_adapter",
             "class": "InstantMeshesRetopologyAdapter",
         },
+        # AutoRemesher retopo (MIT; better on organic/character meshes)
+        "autoremesher_retopology": {
+            "module": "adapters.autoremesher_adapter",
+            "class": "AutoRemesherRetopologyAdapter",
+        },
+        # Trimesh quadric decimate (MIT; true poly reduction, not remesh)
+        "trimesh_decimate": {
+            "module": "adapters.trimesh_decimate_adapter",
+            "class": "TrimeshDecimateAdapter",
+        },
         # UltraShape adapters
         "ultrashape_image_to_raw_mesh": {
             "module": "adapters.ultrashape_adapter",
@@ -179,6 +189,10 @@ class ModelFactory:
         "lingbot_map_environment_scan": {
             "module": "adapters.lingbot_map_adapter",
             "class": "LingBotMapEnvironmentScanAdapter",
+        },
+        "env_scan_gsplat_train": {
+            "module": "adapters.env_scan_gsplat_train_adapter",
+            "class": "EnvScanGsplatTrainAdapter",
         },
         # Kimodo text-to-motion (SOMA → studio_motion.json for VRM)
         "kimodo_text_to_motion": {
@@ -681,6 +695,30 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
         }
     )
 
+    # AutoRemesher retopo
+    configs.update(
+        {
+            "autoremesher_retopology": ModelFactory.create_model_config(
+                model_id="autoremesher_retopology",
+                feature_type="mesh_retopology",
+                vram_requirement=512,
+                init_params={"default_target_quad_count": 8000},
+            )
+        }
+    )
+
+    # Trimesh quadric decimate
+    configs.update(
+        {
+            "trimesh_decimate": ModelFactory.create_model_config(
+                model_id="trimesh_decimate",
+                feature_type="mesh_retopology",
+                vram_requirement=256,
+                init_params={"default_target_face_count": 50000},
+            )
+        }
+    )
+
     # P3-SAM segmentation
     configs.update(
         {
@@ -736,6 +774,11 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 model_id="lingbot_map_environment_scan",
                 feature_type="environment_scan",
                 vram_requirement=16384,
+            ),
+            "env_scan_gsplat_train": ModelFactory.create_model_config(
+                model_id="env_scan_gsplat_train",
+                feature_type="environment_scan",
+                vram_requirement=12288,
             ),
         }
     )

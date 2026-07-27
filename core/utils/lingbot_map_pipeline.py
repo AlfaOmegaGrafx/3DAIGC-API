@@ -403,20 +403,21 @@ def gravity_align_point_cloud(
     colors,
     *,
     extrinsic=None,
-    prefer_floor: bool = False,
+    prefer_floor: bool = True,
 ):
     """
     Rotate XYZ(+RGB) so gravity is +Y (OpenNexus / Three.js), then seat on Y=0.
 
     Order (product convention after Office walk scans):
-      1. Estimate up (camera poses when reliable, else floor RANSAC)
+      1. Estimate up (floor RANSAC by default; camera poses only if prefer_floor=False)
       2. Align up → +Y
       3. If densest slab is at the top, Y-flip (ceiling/floor)
       4. Seat on Y=0
       5. X-mirror (OpenCV/LingBot left↔right vs Three.js)
 
-    Prefers floor RANSAC when ``prefer_floor`` is set, or when camera up looks
-    unreliable (near-horizontal or still inverted after flip).
+    Default ``prefer_floor=True`` — windowed LingBot camera-up often looks
+    "reliable" (``|up.y|>0.45``) but still tilts the room. Pass
+    ``prefer_floor=False`` only for explicit camera-extrinsic experiments.
     """
     import numpy as np
 
@@ -479,6 +480,156 @@ def gravity_align_point_cloud(
         info["y_extent_m"],
     )
     return aligned, colors, info
+
+
+def invert_gravity_aligned_points(
+    verts,
+    gravity_info: Dict[str, Any],
+):
+    """Undo ``gravity_align_point_cloud`` (X-mirror → Y seat → optional Y flip → R)."""
+    import numpy as np
+
+    v = np.asarray(verts, dtype=np.float64).reshape(-1, 3).copy()
+    if gravity_info.get("x_mirrored"):
+        v[:, 0] *= -1.0
+    y_seat = float(gravity_info.get("y_seat_offset") or 0.0)
+    v[:, 1] += y_seat
+    if gravity_info.get("y_flipped"):
+        v[:, 1] *= -1.0
+    R = np.asarray(gravity_info["rotation_3x3"], dtype=np.float64)
+    return (v @ R).astype(np.float32)
+
+
+def _reexport_aligned_cameras(
+    world_dir: Path,
+    gravity_info: Dict[str, Any],
+) -> Optional[Path]:
+    """Rebuild ``cameras_aligned.npz`` after a gravity-align fix."""
+    import numpy as np
+
+    from core.utils.lingbot_3dgs_refine import apply_gravity_to_c2w
+
+    world_dir = Path(world_dir)
+    for cam_src in (
+        world_dir / "cameras.npz",
+        world_dir / "_work" / "lingbot_out" / "cameras.npz",
+    ):
+        if not cam_src.is_file():
+            continue
+        z = np.load(cam_src)
+        ext_raw = z.get("extrinsic_raw")
+        if ext_raw is None:
+            ext_raw = z.get("extrinsic")
+        intr = z.get("intrinsic")
+        if ext_raw is None or intr is None:
+            continue
+        R = np.asarray(gravity_info.get("rotation_3x3"), dtype=np.float64)
+        aligned_ext = apply_gravity_to_c2w(
+            np.asarray(ext_raw),
+            rotation_3x3=R,
+            y_flipped=bool(gravity_info.get("y_flipped")),
+            x_mirrored=bool(gravity_info.get("x_mirrored", True)),
+            y_offset=float(gravity_info.get("y_seat_offset") or 0.0),
+        )
+        out = world_dir / "cameras_aligned.npz"
+        np.savez_compressed(
+            out,
+            extrinsic=np.asarray(aligned_ext, dtype=np.float32),
+            intrinsic=np.asarray(intr, dtype=np.float32),
+        )
+        ling_out = world_dir / "_work" / "lingbot_out"
+        if ling_out.is_dir():
+            np.savez_compressed(
+                ling_out / "cameras_aligned.npz",
+                extrinsic=np.asarray(aligned_ext, dtype=np.float32),
+                intrinsic=np.asarray(intr, dtype=np.float32),
+            )
+        return out
+    return None
+
+
+def repair_world_gravity_alignment(
+    world_dir: Path,
+    *,
+    metric_calibration: Optional[Dict[str, Any]] = None,
+    rerun_phase_a: bool = True,
+) -> Dict[str, Any]:
+    """
+    Re-seat a world that used unreliable camera-extrinsic gravity.
+
+    Inverts the stored gravity transform, re-applies floor RANSAC (product default),
+    refreshes PLYs + cameras, and optionally re-runs Phase A Gaussian export.
+    """
+    world_dir = Path(world_dir)
+    man_path = world_dir / "world.manifest.json"
+    if not man_path.is_file():
+        raise FileNotFoundError(man_path)
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    meta = dict(manifest.get("metadata") or {})
+    old_grav = dict(meta.get("gravity_align") or {})
+    if not old_grav.get("rotation_3x3"):
+        raise RuntimeError(f"No gravity_align metadata in {man_path}")
+
+    pts_path = world_dir / "environment.points.ply"
+    if not pts_path.is_file():
+        pts_path = world_dir / "environment.ply"
+    verts, colors = _read_ply_xyzrgb_numpy(pts_path)
+    raw = invert_gravity_aligned_points(verts, old_grav)
+    aligned, colors, new_grav = gravity_align_point_cloud(
+        raw, colors, prefer_floor=True
+    )
+
+    _write_ply_xyzrgb_numpy(aligned, colors, world_dir / "environment.points.ply")
+    _write_ply_xyzrgb_numpy(aligned, colors, world_dir / "environment.ply")
+
+    pred_npz = world_dir / "_work" / "lingbot_out" / "predictions.npz"
+    if pred_npz.parent.is_dir():
+        import numpy as np
+
+        np.savez_compressed(
+            pred_npz,
+            points=aligned.astype(np.float32),
+            colors=colors.astype(np.uint8),
+        )
+        pred_ply = pred_npz.parent / "predictions.ply"
+        _write_ply_xyzrgb_numpy(aligned, colors, pred_ply)
+
+    meta["gravity_align"] = new_grav
+    manifest["metadata"] = meta
+    if metric_calibration is not None:
+        manifest = apply_metric_scale_to_manifest(manifest, metric_calibration)
+        cal_path = world_dir / "metric_calibration.json"
+        cal_path.write_text(
+            json.dumps(
+                manifest.get("metadata", {}).get("metric_calibration") or {},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    man_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    cam_path = _reexport_aligned_cameras(world_dir, new_grav)
+    phase_a = None
+    if rerun_phase_a:
+        from core.utils.lingbot_3dgs_refine import refine_point_cloud_world_to_gaussian
+
+        frames = world_dir / "_work" / "frames_flat"
+        phase_a = refine_point_cloud_world_to_gaussian(
+            world_dir,
+            frames_dir=frames if frames.is_dir() else None,
+            cameras_npz=cam_path,
+            export_colmap=True,
+        )
+
+    return {
+        "world_directory": str(world_dir),
+        "old_gravity_method": old_grav.get("method"),
+        "new_gravity_method": new_grav.get("method"),
+        "y_extent_m": new_grav.get("y_extent_m"),
+        "cameras_aligned": str(cam_path) if cam_path else None,
+        "phase_a": phase_a,
+    }
+
 
 def _subsample_xyzrgb(verts, colors, *, max_points: int = MAX_EXPORT_POINTS):
     """Downsample XYZ+RGB arrays to at most ``max_points`` (shared stride)."""
@@ -767,6 +918,7 @@ def _run_lingbot_demo(frames_dir: Path, output_dir: Path) -> Dict[str, Any]:
         verts,
         colors,
         extrinsic=vis.get("extrinsic"),
+        prefer_floor=True,
     )
 
     # Persist cameras for Phase B 3DGS training (poses aligned with the cloud).
@@ -967,12 +1119,16 @@ def run_environment_scan(
     stride: int = DEFAULT_FRAME_STRIDE,
     output_root: Optional[Path] = None,
     refine_to_3dgs: bool = False,
+    train_3dgs: bool = False,
+    train_3dgs_steps: int = 7000,
 ) -> Dict[str, Any]:
     """
     Full scan: frames → LingBot-Map → metric world package.
 
     If ``refine_to_3dgs`` is True, Phase A converts the colored point cloud into
     Spark-compatible isotropic Gaussians and exports COLMAP for Phase B training.
+
+    If ``train_3dgs`` is True, Phase B gsplat train runs after Phase A (implies A).
 
     If LingBot is not installed, raises RuntimeError (caller surfaces as job failure).
     """
@@ -1059,7 +1215,9 @@ def run_environment_scan(
             shutil.copy2(cam_src, root / cam_name)
 
     gaussian_info = None
-    if refine_to_3dgs:
+    gaussian_train = None
+    do_phase_a = bool(refine_to_3dgs or train_3dgs)
+    if do_phase_a:
         from core.utils.lingbot_3dgs_refine import refine_point_cloud_world_to_gaussian
 
         cams = root / "cameras_aligned.npz"
@@ -1077,6 +1235,35 @@ def run_environment_scan(
             gaussian_info.get("environment_ply"),
         )
 
+    if train_3dgs:
+        from core.utils.lingbot_3dgs_train import (
+            PhaseBTrainConfig,
+            gsplat_available,
+            train_and_apply_phase_b,
+        )
+
+        if not gsplat_available():
+            raise RuntimeError(
+                "train_3dgs requested but gsplat/CUDA is unavailable on this host"
+            )
+        if not (root / "gs_dataset").is_dir():
+            raise RuntimeError(
+                "train_3dgs requires gs_dataset/ from Phase A camera export"
+            )
+        steps = max(100, int(train_3dgs_steps or 7000))
+        gaussian_train = train_and_apply_phase_b(
+            root,
+            cfg=PhaseBTrainConfig(
+                max_steps=steps,
+                enable_densify=False,
+            ),
+        )
+        logger.info(
+            "Phase B gsplat train: %s gaussians loss=%s",
+            gaussian_train.get("gaussian_count"),
+            gaussian_train.get("final_loss"),
+        )
+
     manifest_path = root / "world.manifest.json"
     ply_path = root / "environment.ply"
     package.update(
@@ -1088,6 +1275,7 @@ def run_environment_scan(
             "output_splat_path": str(ply_path),
             "success": True,
             "gaussian_refine": gaussian_info,
+            "gaussian_train": gaussian_train,
         }
     )
     return package

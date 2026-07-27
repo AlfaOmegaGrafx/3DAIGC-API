@@ -126,6 +126,8 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
             int(inputs.get("frame_stride") or DEFAULT_FRAME_STRIDE),
         )
         refine_to_3dgs = bool(inputs.get("refine_to_3dgs") or False)
+        train_3dgs = bool(inputs.get("train_3dgs") or False)
+        train_3dgs_steps = int(inputs.get("train_3dgs_steps") or 7000)
 
         result = run_environment_scan(
             job_id=job_id,
@@ -138,6 +140,8 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
             stride=stride,
             output_root=Path("outputs") / "worlds" / job_id,
             refine_to_3dgs=refine_to_3dgs,
+            train_3dgs=train_3dgs,
+            train_3dgs_steps=train_3dgs_steps,
         )
 
         return {
@@ -157,5 +161,6 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
                     (result.get("metric_calibration") or {}).get("one_to_one")
                 ),
                 "gaussian_refine": result.get("gaussian_refine"),
+                "gaussian_train": result.get("gaussian_train"),
             },
         }

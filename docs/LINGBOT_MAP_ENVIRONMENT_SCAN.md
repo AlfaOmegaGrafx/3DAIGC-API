@@ -12,7 +12,7 @@ Physical-replica metaverse anchoring: capture with **outward-facing** cameras wh
 | Metric calibration (`metric_scale.py`) | Added |
 | LingBot-Map weights / runtime | **Optional** — `bash scripts/install_lingbot_map.sh` |
 | Phase A: point cloud → isotropic Gaussian (Spark) | **Shipped** — `refine_to_3dgs` / `scripts/refine_env_scan_to_3dgs.py` |
-| Phase B: gsplat train on exported COLMAP | **Next** — dataset under `gs_dataset/` after Phase A |
+| Phase B: gsplat train on exported COLMAP | **Shipped** — `train_3dgs` / `POST /train-3dgs` / `scripts/train_env_scan_3dgs.py` |
 
 ## Install (DGX)
 
@@ -61,13 +61,15 @@ Applied as `environment.transform.scale` (uniform or horizontal-only `[sx,1,sz]`
 
 After LingBot reconstructs, every env-scan applies this order:
 
-1. **Gravity → +Y** (floor RANSAC when camera “up” is inverted/unreliable; else camera poses)
+1. **Gravity → +Y** via **floor RANSAC** (`prefer_floor=True` — product default). Do **not** trust windowed LingBot camera-up alone (`camera_extrinsics+…` tilted Office rooms).
 2. **Ceiling/floor check** — if the densest slab is on top, **Y-flip**
 3. **Seat on Y=0**
 4. **X-mirror** — OpenCV/LingBot left↔right vs Three.js
 5. Optional **horizontal metric scale** for door width (`axis: horizontal`) so height stays correct
 
 Broken camera averages that point near world **-Y** are flipped before align (Galaxy + windowed poses).
+
+Mis-aligned worlds (wrong pitch / identity metric): `repair_world_gravity_alignment(world_dir, metric_calibration=…)` inverts the stored gravity, re-applies floor RANSAC, refreshes PLYs/cameras, and re-runs Phase A.
 
 ## API
 
@@ -134,24 +136,56 @@ Older jobs (pre-camera-export) still get Phase A Gaussians; re-run env-scan (or 
 
 Code: `core/utils/lingbot_3dgs_refine.py`.
 
-### Phase B — densify with gsplat (next integration step)
+### Phase B — photometric gsplat train (shipped)
 
-1. Confirm Phase A looks OK in OpenNexus / Galaxy (Spark path).
-2. Train on `gs_dataset/` (COLMAP TXT + images). Prefer the installed `gsplat` package; HY-World’s `world_gs_trainer.py` is a reference for export helpers (`gsplat.export_splats`).
-3. Suggested starter (adjust paths / iters):
+Requires Phase A `gs_dataset/` (images + poses). Trains with the installed
+[`gsplat`](https://github.com/nerfstudio-project/gsplat) package (no nerfstudio
+install required). Preserves gravity-aligned coordinates (no scene renormalization).
 
-```bash
-# Example — wire a thin wrapper later; do not block on HY-World panorama assumptions
-python -m gsplat.examples.simple_trainer \
-  --data_dir outputs/worlds/<JOB_ID>/gs_dataset \
-  --result_dir outputs/worlds/<JOB_ID>/gs_train \
-  --data_factor 1
+**Pose source (important):** LingBot Studio X-mirror makes `det(R_c2w)=-1`.
+COLMAP `images.txt` quaternions cannot represent that and silently corrupt poses
+(muddy brown blob). Phase B loads matrix poses from `gs_dataset/poses_c2w.npy`
+or `cameras_aligned.npz`. Export always writes `poses_c2w.npy`.
+
+**Defaults:** init from Phase A Gaussians, densify/clone **off** (LingBot poses
++ densify previously exploded the AABB), opacity reset disabled, Spark DC-only
+export + AABB prune. Pass `--enable-densify` only for true SfM COLMAP.
+
+**On a new scan** (long job — prefer separate train for big walks):
+
+```json
+{ "refine_to_3dgs": true, "train_3dgs": true, "train_3dgs_steps": 7000 }
 ```
 
-4. Export optimized PLY → replace `environment.ply`; set manifest `metadata.gaussian_phase` to `B_gsplat_trained`.
-5. Keep `environment.points.ply` and metric `transform.scale` unchanged.
+**On an existing world** (Office / previous Phase A):
 
-**Do not** full-batch `images.to(cuda)` for LingBot on GB10; Phase B training should use gsplat’s own dataloaders (per-view), not LingBot windowed inference.
+```bash
+cd /home/sifr/3DAIGC-API
+source venv/bin/activate
+python scripts/train_env_scan_3dgs.py outputs/worlds/<JOB_ID> --max-steps 7000
+# smoke: --max-steps 200 --max-images 24
+```
+
+Or API:
+
+```http
+POST /api/v1/world-generation/train-3dgs
+{ "world_id": "<JOB_ID>", "max_steps": 7000, "data_factor": 4 }
+```
+
+Writes:
+
+| Path | Purpose |
+|------|---------|
+| `gs_train/point_cloud.ply` | Trained splat |
+| `environment.ply` | Replaced with trained PLY (Spark) |
+| `environment.phaseA.ply` | Phase A backup |
+| `gs_dataset/poses_c2w.npy` | Authoritative c2w (4×4) |
+| manifest `gaussian_phase` | `B_gsplat_trained` |
+
+Default: 7000 steps, `data_factor=4` (downsample images). Metric `transform.scale` unchanged.
+
+**Do not** full-batch `images.to(cuda)` for LingBot on GB10; Phase B uses gsplat’s per-view dataloader.
 
 ## Limitations
 
@@ -159,3 +193,4 @@ python -m gsplat.examples.simple_trainer \
 - Default output is a **colored point cloud**; denser trained Gaussians are Phase B.
 - Absolute scale needs a measured real-world length — headset passthrough alone is not enough.
 - Phase A Gaussians are isotropic (same radius per point) — good for Spark load / XR preview, not final quality.
+- Phase B sharpens appearance via photometric gsplat train; quality still depends on pose accuracy and view coverage.
