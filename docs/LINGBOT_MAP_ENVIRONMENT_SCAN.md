@@ -187,6 +187,31 @@ Default: 7000 steps, `data_factor=4` (downsample images). Metric `transform.scal
 
 **Do not** full-batch `images.to(cuda)` for LingBot on GB10; Phase B uses gsplat’s per-view dataloader.
 
+### Sharper / more video-faithful Gaussians (practical)
+
+Capture (biggest lever):
+
+1. **Slower walk, more overlap** — pause at corners; avoid motion blur and rolling shutter.
+2. **More frames** — `max_frames: 600`, `frame_stride: 1` (pipeline cap ~600). Old Office jobs used ~365.
+3. **Keep camera height steady**; cover walls/ceiling from multiple angles (holes = missing views).
+4. **Correct door metric** — `axis: horizontal`, measured `true_meters` / `recon_length` (Office: 0.762 / 0.47). Wrong scale makes Spark look “soft” after parent transform.
+
+Train (Phase B on a good Phase A world):
+
+| Goal | Settings |
+|------|----------|
+| Normal | `--max-steps 7000`, `data_factor=2` |
+| Sharper | `--max-steps 10000`, `data_factor=2` |
+| Avoid | densify on LingBot poses; `>15000` steps (pose overfit); `data_factor=4` if you want max fidelity |
+
+```bash
+python scripts/train_env_scan_3dgs.py outputs/worlds/<JOB_ID> --max-steps 10000 --data-factor 2
+```
+
+Do **not** re-enable densify or metric SVD bake. Photometric color-only refine is optional after poses are solid; PC recolor from `environment.points.ply` is safer when poses are soft.
+
+Same video can be reprocessed after the gravity lock — new scan picks up `prefer_floor=True` automatically.
+
 ## Limitations
 
 - LingBot must be installed or jobs fail with an install hint (other models unaffected).
