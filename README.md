@@ -19,6 +19,11 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 **Typical dev topology:** API on **DGX Spark** (`:7842`) + **OpenNexus3DStudio** dev server on a Surface PC (`VITE_API_ENDPOINT=/__dev_dgx_proxy` → DGX). See [docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md).
 
 ## CHANGELOG
+#### Updates 07.30 (LingBot env-scan Phase A/B)
+* **Environment scan** — `POST /api/v1/world-generation/environment-scan` (LingBot-Map): walk video → gravity-aligned world package; optional `refine_to_3dgs` (Phase A) and `train_3dgs` / `POST /train-3dgs` (Phase B gsplat).
+* **Gravity lock** — floor RANSAC default (`prefer_floor`); wall-vs-camera fallback; residual level + PCA flatten + yaw square; Spark `orientationMode: 'none'`.
+* **Docs** — [LINGBOT_MAP_ENVIRONMENT_SCAN.md](docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md) (capture tips, Phase B settings, repair helper).
+
 #### Updates 06.17 (OpenNexus3DStudio integration)
 * **Naming** — docs and README aligned with **OpenNexus3DStudio** (replaces legacy "Character Studio" / mixed Open3DStudio client labels in integration sections).
 * **Avatar rig contract** — [API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md) documents glTF Y-up / -Z forward, Blender template rig path, and client validation (`aigcRigContract.js`). Standard **`.vrm` upload** in OpenNexus3DStudio does not run AIGC mesh–skeleton alignment; template-rig GLBs from the API do.
@@ -27,6 +32,7 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 #### Updates 06.13 (OpenNexus3DStudio / local GPU)
 * **Template VRM rig** — `rig_mode: template` on `POST /api/v1/auto-rigging/generate-rig` applies `assets/example_autorig/template.vrm` skeleton to AIGC meshes (Blender pipeline in `scripts/blender/`).
 * **Image → World Package** — `POST /api/v1/world-generation/image-to-world` produces splat environment + optional mesh props; download via `GET /jobs/{id}/download?asset=manifest`.
+* **Environment Scan (LingBot)** — `POST /api/v1/world-generation/environment-scan` + Phase A/B 3DGS (`refine_to_3dgs`, `/train-3dgs`); see [LINGBOT_MAP_ENVIRONMENT_SCAN.md](docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md).
 * **Image → Gaussian Splat** — `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) for Spark.js preview in OpenNexus3DStudio.
 * **Local DGX deployment** — Redis + scheduler + API scripts (`scripts/start_services_detached.sh`, `scripts/env_local_gpu.sh`). See **[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)**.
 * **Commercial model audit** — `docs/MODEL_LICENSES.md`; non-commercial routes disabled by default in `config/models.yaml`.

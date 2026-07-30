@@ -140,6 +140,9 @@ def apply_gravity_to_c2w(
     y_flipped: bool = False,
     x_mirrored: bool = True,
     y_offset: float = 0.0,
+    level_3x3: np.ndarray | None = None,
+    yaw_3x3: np.ndarray | None = None,
+    y_seat_final: float = 0.0,
 ) -> np.ndarray:
     """
     Apply the same uprighting used on the point cloud to camera-to-world (3x4 or 4x4).
@@ -151,6 +154,8 @@ def apply_gravity_to_c2w(
     if single:
         mats = mats[None, ...]
     out = []
+    Rl = np.asarray(level_3x3, dtype=np.float64) if level_3x3 is not None else None
+    Ry = np.asarray(yaw_3x3, dtype=np.float64) if yaw_3x3 is not None else None
     for m in mats:
         if m.shape == (3, 4):
             M = np.eye(4)
@@ -172,6 +177,14 @@ def apply_gravity_to_c2w(
             tw2 = tw2 @ S
         tw2 = tw2.copy()
         tw2[1] -= y_offset
+        if Rl is not None:
+            Rw2 = Rl @ Rw2
+            tw2 = tw2 @ Rl.T
+        if Ry is not None:
+            Rw2 = Ry @ Rw2
+            tw2 = tw2 @ Ry.T
+        tw2 = tw2.copy()
+        tw2[1] -= float(y_seat_final or 0.0)
         M2 = np.eye(4)
         M2[:3, :3] = Rw2
         M2[:3, 3] = tw2

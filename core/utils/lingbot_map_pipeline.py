@@ -415,9 +415,9 @@ def gravity_align_point_cloud(
       4. Seat on Y=0
       5. X-mirror (OpenCV/LingBot left↔right vs Three.js)
 
-    Default ``prefer_floor=True`` — windowed LingBot camera-up often looks
-    "reliable" (``|up.y|>0.45``) but still tilts the room. Pass
-    ``prefer_floor=False`` only for explicit camera-extrinsic experiments.
+    Default ``prefer_floor=True`` — floor RANSAC first. If camera extrinsics are
+    available and strongly disagree with the floor normal (common on close-up
+    wall-heavy scans where RANSAC locks onto a wall), fall back to camera-up.
     """
     import numpy as np
 
@@ -426,18 +426,31 @@ def gravity_align_point_cloud(
     method = "floor_ransac"
     up = None
     cam_up = None
-    if extrinsic is not None and not prefer_floor:
+    if extrinsic is not None:
         cam_up = _estimate_up_from_camera_extrinsics(extrinsic)
-        if cam_up is not None:
-            # Horizontal-ish "up" is useless for gravity — fall back to floor.
-            if abs(float(cam_up[1])) < 0.45:
-                cam_up = None
-            else:
-                up = cam_up
-                method = "camera_extrinsics"
+        if cam_up is not None and abs(float(cam_up[1])) < 0.45:
+            # Horizontal-ish "up" is useless for gravity.
+            cam_up = None
+    if not prefer_floor and cam_up is not None:
+        up = cam_up
+        method = "camera_extrinsics"
     if up is None:
         up = _estimate_up_from_floor_ransac(verts)
         method = "floor_ransac"
+        # Close-up / wall-dominated clouds: RANSAC may treat a wall as the floor
+        # (Office Detail sideways). If camera-up is vertical and disagrees, trust camera.
+        if cam_up is not None:
+            floor_u = np.asarray(up, dtype=np.float64)
+            floor_u = floor_u / (np.linalg.norm(floor_u) + 1e-12)
+            cam_u = np.asarray(cam_up, dtype=np.float64)
+            cam_u = cam_u / (np.linalg.norm(cam_u) + 1e-12)
+            if float(np.dot(floor_u, cam_u)) < 0.5:
+                up = cam_up
+                method = "camera_extrinsics_vs_wall"
+                logger.info(
+                    "Floor RANSAC disagreed with camera-up (dot<%.2f) — using camera",
+                    0.5,
+                )
 
     target = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     R = _rotation_aligning_a_to_b(up, target)
@@ -464,6 +477,26 @@ def gravity_align_point_cloud(
     aligned[:, 0] *= -1.0
     method = f"{method}+x_mirror"
 
+    # Residual floor leveling — camera-up paths often leave a few degrees of tilt
+    # ("sitting caddy-corner" / one corner high).
+    aligned, R_level, level_deg = _residual_floor_level(aligned)
+    if level_deg >= 0.5:
+        method = f"{method}+level"
+
+    # Yaw-align dominant horizontal axis to +X so walls sit square to the grid.
+    aligned, R_yaw, yaw_deg = _yaw_align_to_world_x(aligned)
+    if abs(yaw_deg) >= 1.0:
+        method = f"{method}+yaw"
+
+    # PCA slab flatten — residual tip after camera/floor up (Office Detail ~19°).
+    # Only when the thin axis is already near +Y (room slab), not a vertical wall.
+    aligned, R_pca, pca_deg = _pca_flatten_to_y(aligned)
+    if pca_deg >= 1.0:
+        method = f"{method}+pca_flat"
+
+    y_seat_final = float(aligned[:, 1].min())
+    aligned[:, 1] -= y_seat_final
+
     info = {
         "method": method,
         "up_vector": [float(x) for x in np.asarray(up).tolist()],
@@ -473,23 +506,128 @@ def gravity_align_point_cloud(
         "rotation_3x3": R.tolist(),
         "y_flipped": y_flipped,
         "y_seat_offset": y_seat_offset,
+        "y_seat_final": y_seat_final,
+        "level_3x3": R_level.tolist(),
+        "level_deg": float(level_deg),
+        "yaw_3x3": (np.asarray(R_pca, dtype=np.float64) @ np.asarray(R_yaw, dtype=np.float64)).tolist()
+        if pca_deg >= 1.0
+        else R_yaw.tolist(),
+        "yaw_deg": float(yaw_deg),
+        "pca_flat_3x3": R_pca.tolist(),
+        "pca_flat_deg": float(pca_deg),
     }
     logger.info(
-        "Gravity-aligned point cloud via %s (Y extent %.2fm)",
+        "Gravity-aligned point cloud via %s (Y extent %.2fm, level=%.1f°, yaw=%.1f°, pca=%.1f°)",
         method,
         info["y_extent_m"],
+        level_deg,
+        yaw_deg,
+        pca_deg,
     )
     return aligned, colors, info
+
+
+def _pca_flatten_to_y(verts):
+    """
+    Align the point cloud's minimum-variance PCA axis to +Y when it is already
+    near vertical (room slab tipped a little). Skips wall-thin clouds.
+    """
+    import numpy as np
+
+    v = np.asarray(verts, dtype=np.float64).reshape(-1, 3)
+    if len(v) < 100:
+        return v.astype(np.float32), np.eye(3), 0.0
+    c = v.mean(axis=0)
+    _, _, vt = np.linalg.svd(v - c, full_matrices=False)
+    n = vt[-1].astype(np.float64)
+    n = n / (np.linalg.norm(n) + 1e-12)
+    if n[1] < 0:
+        n = -n
+    target = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    deg = float(np.degrees(np.arccos(np.clip(np.dot(n, target), -1.0, 1.0))))
+    # Near-horizontal thin axis ⇒ wall-dominated cloud — do not flatten.
+    if deg < 1.0 or deg > 35.0:
+        return v.astype(np.float32), np.eye(3), 0.0 if deg > 35.0 else deg
+    R = _rotation_aligning_a_to_b(n, target)
+    out = (v @ R.T).astype(np.float32)
+    return out, R, deg
+
+
+def _residual_floor_level(verts):
+    """Rotate so the low-point plane normal → +Y. Returns (verts, R, degrees)."""
+    import numpy as np
+
+    v = np.asarray(verts, dtype=np.float64).reshape(-1, 3)
+    if len(v) < 100:
+        return v.astype(np.float32), np.eye(3), 0.0
+    y = v[:, 1]
+    low = v[y <= np.percentile(y, 12.0)]
+    if len(low) < 50:
+        low = v[y <= np.percentile(y, 20.0)]
+    c = low.mean(axis=0)
+    _, _, vt = np.linalg.svd(low - c, full_matrices=False)
+    n = vt[-1].astype(np.float64)
+    n = n / (np.linalg.norm(n) + 1e-12)
+    if n[1] < 0:
+        n = -n
+    target = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    deg = float(np.degrees(np.arccos(np.clip(np.dot(n, target), -1.0, 1.0))))
+    # Skip large corrections — incomplete detail scans have messy "floors".
+    if deg < 0.5 or deg > 12.0:
+        return v.astype(np.float32), np.eye(3), 0.0 if deg > 12.0 else deg
+    R = _rotation_aligning_a_to_b(n, target)
+    out = (v @ R.T).astype(np.float32)
+    return out, R, deg
+
+
+def _yaw_align_to_world_x(verts):
+    """
+    Rotate around +Y so the dominant horizontal PCA axis aligns with world +X.
+    """
+    import numpy as np
+
+    v = np.asarray(verts, dtype=np.float64).reshape(-1, 3)
+    if len(v) < 100:
+        return v.astype(np.float32), np.eye(3), 0.0
+    y0, y1 = np.percentile(v[:, 1], [5.0, 45.0])
+    slab = v[(v[:, 1] >= y0) & (v[:, 1] <= y1)]
+    if len(slab) < 50:
+        slab = v
+    xz = slab[:, [0, 2]]
+    xz = xz - xz.mean(axis=0)
+    cov = (xz.T @ xz) / max(len(xz), 1)
+    evals, evecs = np.linalg.eigh(cov)
+    axis = evecs[:, int(np.argmax(evals))]  # [dx, dz] in XZ
+    ang = float(np.arctan2(axis[1], axis[0]))  # radians from +X
+    # Prefer the axis direction that needs ≤90° of yaw.
+    if abs(ang) > 0.5 * np.pi:
+        ang = ang - np.sign(ang) * np.pi
+    # Rotate cloud by -ang: x' = c x + s z, z' = -s x + c z with c=cos(ang), s=sin(ang)
+    deg = float(np.degrees(-ang))
+    if abs(deg) < 1.0:
+        return v.astype(np.float32), np.eye(3), deg
+    c, s = float(np.cos(ang)), float(np.sin(ang))
+    R = np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]], dtype=np.float64)
+    out = (v @ R.T).astype(np.float32)
+    return out, R, deg
 
 
 def invert_gravity_aligned_points(
     verts,
     gravity_info: Dict[str, Any],
 ):
-    """Undo ``gravity_align_point_cloud`` (X-mirror → Y seat → optional Y flip → R)."""
+    """Undo gravity align (final seat → yaw → level → X-mirror → seat → flip → R)."""
     import numpy as np
 
     v = np.asarray(verts, dtype=np.float64).reshape(-1, 3).copy()
+    y_final = float(gravity_info.get("y_seat_final") or 0.0)
+    v[:, 1] += y_final
+    R_yaw = gravity_info.get("yaw_3x3")
+    if R_yaw is not None:
+        v = v @ np.asarray(R_yaw, dtype=np.float64)
+    R_level = gravity_info.get("level_3x3")
+    if R_level is not None:
+        v = v @ np.asarray(R_level, dtype=np.float64)
     if gravity_info.get("x_mirrored"):
         v[:, 0] *= -1.0
     y_seat = float(gravity_info.get("y_seat_offset") or 0.0)
@@ -530,6 +668,9 @@ def _reexport_aligned_cameras(
             y_flipped=bool(gravity_info.get("y_flipped")),
             x_mirrored=bool(gravity_info.get("x_mirrored", True)),
             y_offset=float(gravity_info.get("y_seat_offset") or 0.0),
+            level_3x3=gravity_info.get("level_3x3"),
+            yaw_3x3=gravity_info.get("yaw_3x3"),
+            y_seat_final=float(gravity_info.get("y_seat_final") or 0.0),
         )
         out = world_dir / "cameras_aligned.npz"
         np.savez_compressed(
@@ -575,8 +716,27 @@ def repair_world_gravity_alignment(
         pts_path = world_dir / "environment.ply"
     verts, colors = _read_ply_xyzrgb_numpy(pts_path)
     raw = invert_gravity_aligned_points(verts, old_grav)
+
+    extrinsic = None
+    for cam_src in (
+        world_dir / "cameras.npz",
+        world_dir / "_work" / "lingbot_out" / "cameras.npz",
+    ):
+        if not cam_src.is_file():
+            continue
+        import numpy as np
+
+        z = np.load(cam_src)
+        extrinsic = z.get("extrinsic_raw")
+        if extrinsic is None:
+            extrinsic = z.get("extrinsic")
+        break
+
     aligned, colors, new_grav = gravity_align_point_cloud(
-        raw, colors, prefer_floor=True
+        raw,
+        colors,
+        extrinsic=extrinsic,
+        prefer_floor=True,
     )
 
     _write_ply_xyzrgb_numpy(aligned, colors, world_dir / "environment.points.ply")
@@ -597,6 +757,12 @@ def repair_world_gravity_alignment(
     meta["gravity_align"] = new_grav
     manifest["metadata"] = meta
     if metric_calibration is not None:
+        # apply_metric_scale multiplies into existing transform — reset to 1 first
+        env = dict(manifest.get("environment") or {})
+        xf = dict(env.get("transform") or {})
+        xf["scale"] = [1.0, 1.0, 1.0]
+        env["transform"] = xf
+        manifest["environment"] = env
         manifest = apply_metric_scale_to_manifest(manifest, metric_calibration)
         cal_path = world_dir / "metric_calibration.json"
         cal_path.write_text(
@@ -949,6 +1115,9 @@ def _run_lingbot_demo(frames_dir: Path, output_dir: Path) -> Dict[str, Any]:
                     y_flipped=y_flipped,
                     x_mirrored=True,
                     y_offset=y_seat,
+                    level_3x3=gravity_info.get("level_3x3"),
+                    yaw_3x3=gravity_info.get("yaw_3x3"),
+                    y_seat_final=float(gravity_info.get("y_seat_final") or 0.0),
                 )
                 cameras_aligned_path = output_dir / "cameras_aligned.npz"
                 np.savez_compressed(

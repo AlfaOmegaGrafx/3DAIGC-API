@@ -1168,6 +1168,26 @@ def sanitize_gaussian_scales(
     verts[:, pidx["scale_1"]] = np.log(sc[:, 1]).astype(np.float32)
     verts[:, pidx["scale_2"]] = np.log(sc[:, 2]).astype(np.float32)
 
+    # Spark expects unit quaternions; Phase B can drift norms → blob/streak artifacts.
+    quat_fixed = 0
+    if all(k in pidx for k in ("rot_0", "rot_1", "rot_2", "rot_3")):
+        q = verts[:, [pidx["rot_0"], pidx["rot_1"], pidx["rot_2"], pidx["rot_3"]]].astype(
+            np.float64
+        )
+        nrm = np.linalg.norm(q, axis=1, keepdims=True)
+        bad = (nrm[:, 0] < 1e-8) | (np.abs(nrm[:, 0] - 1.0) > 0.05)
+        quat_fixed = int(bad.sum())
+        nrm = np.clip(nrm, 1e-8, None)
+        q = q / nrm
+        # Identity fallback for degenerate quats
+        deg = nrm[:, 0] < 1e-6
+        if deg.any():
+            q[deg] = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        verts[:, pidx["rot_0"]] = q[:, 0].astype(np.float32)
+        verts[:, pidx["rot_1"]] = q[:, 1].astype(np.float32)
+        verts[:, pidx["rot_2"]] = q[:, 2].astype(np.float32)
+        verts[:, pidx["rot_3"]] = q[:, 3].astype(np.float32)
+
     new_header_lines = []
     for ln in header_txt.splitlines(True):
         if ln.startswith("element vertex"):
@@ -1181,6 +1201,7 @@ def sanitize_gaussian_scales(
         "dropped": int(n - int(keep.sum())),
         "max_scale": max_scale,
         "max_aniso": max_aniso,
+        "quat_renormed": quat_fixed,
         "path": str(dst_ply),
     }
 

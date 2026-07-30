@@ -990,7 +990,11 @@ async def download_world_asset(job_id: str, asset_path: str, request: Request):
             path=str(target),
             filename=target.name,
             media_type=content_type,
-            headers={"X-Job-ID": job_id},
+            headers={
+                "X-Job-ID": job_id,
+                # Env-scan repairs rewrite PLYs in place — avoid sticky browser caches.
+                "Cache-Control": "no-cache, must-revalidate",
+            },
         )
     except HTTPException:
         raise
