@@ -8,7 +8,7 @@ import os
 import tempfile
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from api.dependencies import get_scheduler
@@ -166,6 +166,7 @@ async def publish_glb_upload(
     file: UploadFile = File(...),
     asset_name: Optional[str] = Query(None),
     use_pbr: bool = Query(True),
+    viewport_lighting: Optional[str] = Form(None),
 ):
     cfg = _spatial_config()
     if not cfg["public_base_url"]:
@@ -173,6 +174,17 @@ async def publish_glb_upload(
             status_code=503,
             detail="MSF_PUBLIC_BASE_URL is not configured on the API server",
         )
+
+    lighting_payload = None
+    if viewport_lighting:
+        try:
+            import json
+
+            parsed = json.loads(viewport_lighting)
+            if isinstance(parsed, dict):
+                lighting_payload = parsed.get("opennexusViewportLighting") or parsed
+        except (TypeError, ValueError, json.JSONDecodeError):
+            lighting_payload = None
 
     suffix = os.path.splitext(file.filename or "upload.glb")[1] or ".glb"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -188,6 +200,7 @@ async def publish_glb_upload(
             asset_name=stem,
             objects_dir=cfg["objects_dir"],
             public_base_url=cfg["public_base_url"],
+            viewport_lighting=lighting_payload,
         )
     finally:
         os.unlink(tmp_path)

@@ -13,8 +13,10 @@ fi
 echo "[bootstrap] git submodule update --init --recursive"
 git submodule update --init --recursive
 
-echo "[bootstrap] pip install -r requirements-models-extra.txt"
-"$ROOT/venv/bin/pip" install -r "$ROOT/requirements-models-extra.txt"
+echo "[bootstrap] pip install -r requirements-models-extra.txt (with constraints)"
+"$ROOT/venv/bin/pip" install -c "$ROOT/scripts/constraints-hf.txt" \
+  -c "$ROOT/scripts/constraints-models-runtime.txt" \
+  -r "$ROOT/requirements-models-extra.txt"
 
 echo "[bootstrap] utils3d (TRELLIS pin, --no-deps to avoid PyPI open3d / heavy GL stacks)"
 "$ROOT/venv/bin/pip" install --no-deps \

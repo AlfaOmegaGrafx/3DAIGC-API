@@ -24,6 +24,7 @@ from core.file_store import FileStore
 from core.utils.file_utils import (
     SUPPORTED_IMAGE_FORMATS,
     SUPPORTED_MESH_FORMATS,
+    SUPPORTED_VIDEO_FORMATS,
     FileUploadError,
     save_upload_file,
 )
@@ -280,6 +281,21 @@ async def upload_mesh(
     """
     return await upload_file_with_validation(
         file, "mesh", SUPPORTED_MESH_FORMATS, file_store, max_size_mb=200
+    )
+
+
+@router.post("/video", response_model=FileUploadResponse)
+async def upload_video(
+    file: UploadFile = File(..., description="Walk-scan video (Galaxy XR / phone)"),
+    file_store: Optional[FileStore] = Depends(get_file_store),
+):
+    """
+    Upload a walk-around video for environment scan (LingBot-Map).
+
+    Supported formats: MP4, WebM, MOV, MKV, AVI, M4V. Max 2 GB.
+    """
+    return await upload_file_with_validation(
+        file, "video", SUPPORTED_VIDEO_FORMATS, file_store, max_size_mb=2048
     )
 
 

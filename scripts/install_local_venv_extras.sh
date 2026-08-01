@@ -33,7 +33,9 @@ echo "=== [2/6] install_next_steps.sh (spconv/cumm + PyG) ==="
 echo "=== [3a/6] Core model runtime deps (TRELLIS/Hunyuan/PartPacker/VoxHammer) ==="
 # diffusers/omegaconf/addict are imported at model-load time by several adapters and were
 # missing from earlier runs (server started but every diffusion/TRELLIS job failed).
-"$PIP" install -q diffusers==0.32.2 omegaconf addict einops opencv-python-headless || true
+"$PIP" install -q -c "$ROOT/scripts/constraints-hf.txt" \
+  -c "$ROOT/scripts/constraints-models-runtime.txt" \
+  diffusers==0.32.2 omegaconf addict einops opencv-python-headless || true
 
 echo "=== [3/6] PartField-style deps (from install.sh) ==="
 # pytz is required by thirdparty/PartField/partfield/config; PartField PVCNN needs PyG (below).
@@ -88,12 +90,28 @@ if [[ "$(uname -m)" == "aarch64" ]]; then
 else
   cp "$ROOT/requirements.txt" "$_req_filtered"
 fi
-"$PIP" install -q -r "$_req_filtered" || {
+"$PIP" install -q -c "$ROOT/scripts/constraints-hf.txt" -r "$_req_filtered" || {
   echo "[install_local_venv_extras] requirements.txt install had errors; retry after resolving conflicts." >&2
 }
 rm -f "$_req_filtered"
 
-"$PIP" install -q huggingface_hub || true
+"$PIP" install -q -c "$ROOT/scripts/constraints-hf.txt" huggingface_hub || true
+
+echo "=== [7/7] HF stack drift + conditioning preflight ==="
+bash "$ROOT/scripts/check_venv_drift.sh" || {
+  echo "[install_local_venv_extras] HF venv drift — fix pins before starting API." >&2
+  exit 1
+}
+HF_ARGS=()
+if [[ "${P3D_HF_VERIFY_GPU:-}" == "1" ]]; then
+  HF_ARGS+=(--gpu)
+fi
+"$PY" "$ROOT/scripts/verify_hf_conditioning.py" "${HF_ARGS[@]}" || {
+  echo "[install_local_venv_extras] HF conditioning verify failed." >&2
+  exit 1
+}
+"$PY" "$ROOT/scripts/verify_registry.py" --validate || exit 1
+bash "$ROOT/scripts/snapshot_venv_lock.sh" || true
 
 echo ""
 echo "Done. Next:"

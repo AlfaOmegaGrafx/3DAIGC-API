@@ -207,6 +207,24 @@ profiles:
       output_format: obj
       target_vertex_count: 5000
 
+  autoremesher_retopology:
+    module: adapters.autoremesher_adapter
+    class: AutoRemesherRetopologyAdapter
+    timeout_sec: 1800
+    inputs:
+      mesh_path: "{mesh}"
+      output_format: obj
+      target_quad_count: 5000
+
+  trimesh_decimate:
+    module: adapters.trimesh_decimate_adapter
+    class: TrimeshDecimateAdapter
+    timeout_sec: 600
+    inputs:
+      mesh_path: "{mesh}"
+      output_format: glb
+      target_face_count: 5000
+
   xatlas_uv_unwrapping:
     module: adapters.xatlas_adapter
     class: XatlasUVUnwrappingAdapter

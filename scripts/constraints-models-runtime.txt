@@ -1,0 +1,6 @@
+# Diffusion / adapter runtime pins (shared main venv — TRELLIS, Hunyuan, Krea, VoxHammer).
+# Krea2Pipeline is only on diffusers main (not PyPI 0.38.x yet) — setup_krea2.sh installs a pinned git ref.
+# Install with: pip install -c scripts/constraints-hf.txt -c scripts/constraints-models-runtime.txt …
+peft==0.17.1
+accelerate>=1.0.0,<2.0
+omegaconf>=2.3.0,<3.0

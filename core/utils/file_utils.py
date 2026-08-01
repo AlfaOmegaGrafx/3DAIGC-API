@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Supported file formats
 SUPPORTED_IMAGE_FORMATS = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tga"]
 SUPPORTED_MESH_FORMATS = [".glb", ".obj", ".fbx", ".ply", ".stl", ".gltf"]
+SUPPORTED_VIDEO_FORMATS = [".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"]
 SUPPORTED_TEXTURE_FORMATS = [".jpg", ".jpeg", ".png", ".tga", ".exr", ".hdr"]
 
 # Validation limits
@@ -212,12 +213,15 @@ async def save_upload_file(
         Path(destination_dir).mkdir(parents=True, exist_ok=True)
 
         # Validate file extension
+        allowed = (
+            SUPPORTED_IMAGE_FORMATS + SUPPORTED_MESH_FORMATS + SUPPORTED_VIDEO_FORMATS
+        )
         if upload_file.filename and not validate_file_extension(
-            upload_file.filename, SUPPORTED_IMAGE_FORMATS + SUPPORTED_MESH_FORMATS
+            upload_file.filename, allowed
         ):
             raise FileUploadError(
                 upload_file.filename,
-                f"Unsupported file format. Supported: {SUPPORTED_IMAGE_FORMATS + SUPPORTED_MESH_FORMATS}",
+                f"Unsupported file format. Supported: {allowed}",
             )
 
         # Generate unique filename
@@ -533,11 +537,14 @@ def get_file_type_from_extension(filename: str) -> str:
     image_exts = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"]
     mesh_exts = [".glb", ".obj", ".fbx", ".ply", ".stl"]
     texture_exts = [".jpg", ".jpeg", ".png", ".tga", ".exr", ".hdr"]
+    video_exts = list(SUPPORTED_VIDEO_FORMATS)
 
     if ext in image_exts:
         return "image"
     elif ext in mesh_exts:
         return "mesh"
+    elif ext in video_exts:
+        return "video"
     elif ext in texture_exts:
         return "texture"
     else:
@@ -589,6 +596,22 @@ class OutputPathGenerator:
         subdirectory: str = "rigged",
     ) -> Path:
         """Generate output path for rigged mesh files."""
+        output_dir = self.base_output_dir / subdirectory
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = int(time.time())
+        filename = f"{model_id}_{base_name}_{timestamp}.{output_format}"
+
+        return output_dir / filename
+
+    def generate_image_path(
+        self,
+        model_id: str,
+        base_name: str,
+        output_format: str = "png",
+        subdirectory: str = "images",
+    ) -> Path:
+        """Generate output path for generated raster images."""
         output_dir = self.base_output_dir / subdirectory
         output_dir.mkdir(parents=True, exist_ok=True)
 

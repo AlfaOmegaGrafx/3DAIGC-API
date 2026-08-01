@@ -1,6 +1,10 @@
 """
 Non-rigid template wrap (MeshMonk / CC-Wrap analog) — PHASE 2 STUB.
 
+HUMANOID ONLY: wrap / MeshMonk targets human ARKit topology on template.vrm.
+Do not use for SkinTokens or creature_template rigs — those use client-side
+creature face retarget (OpenNexus creatureFaceRetarget.js).
+
 Full facial blend-shape transfer requires deforming template.vrm topology onto the
 AIGC mesh (different vertex count). This script currently runs the bones-only rig
 then documents the gap. See docs/MESH_WRAP_ROADMAP.md.
@@ -29,6 +33,8 @@ if result.returncode != 0:
 
 print("APPLY_HUMANOID_TEMPLATE_WRAP_STUB_OK")
 print(
-    "NOTE: blend shapes not transferred — wrap phase pending (MESH_WRAP_ROADMAP.md)",
+    "NOTE: humanoid-only wrap stub — blend shapes not transferred "
+    "(MESH_WRAP_ROADMAP.md). Creatures: use creature_template / SkinTokens + "
+    "OpenNexus creatureFaceRetarget.",
     file=sys.stderr,
 )

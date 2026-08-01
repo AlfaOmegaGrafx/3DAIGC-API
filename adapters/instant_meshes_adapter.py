@@ -6,10 +6,13 @@ binary; see ``scripts/install_instant_meshes.sh``.
 """
 
 import logging
+import shutil
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from utils.instant_meshes_utils import (
+    INSTANT_MESHES_INPUT_EXTS,
     find_instant_meshes_binary,
     get_instant_meshes_info,
     run_instant_meshes,
@@ -26,7 +29,7 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
     """Quad-dominant retopology via Instant Meshes CLI (CPU)."""
 
     MODEL_ID = "instant_meshes_retopology"
-    DEFAULT_TARGET_VERTICES = 4000
+    DEFAULT_TARGET_VERTICES = 50000
 
     def __init__(
         self,
@@ -63,7 +66,30 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
     def _unload_model(self):
         pass
 
+    def _cli_input_for_mesh(
+        self, mesh_path: Path, mesh
+    ) -> Tuple[Path, Optional[Path]]:
+        """
+        Instant Meshes only loads ``.obj`` / ``.ply`` / ``.aln``.
+        Convert other formats (e.g. ``.glb``) to a temp OBJ via trimesh.
+        Returns ``(cli_input_path, temp_dir_to_cleanup_or_None)``.
+        """
+        if mesh_path.suffix.lower() in INSTANT_MESHES_INPUT_EXTS:
+            return mesh_path, None
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="im_in_"))
+        cli_input = tmp_dir / f"{mesh_path.stem}.obj"
+        self.mesh_processor.save_mesh(mesh, cli_input, do_normalise=False)
+        logger.info(
+            "Converted %s → %s for Instant Meshes (native: %s)",
+            mesh_path,
+            cli_input,
+            sorted(INSTANT_MESHES_INPUT_EXTS),
+        )
+        return cli_input, tmp_dir
+
     def _process_request(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        tmp_dir: Optional[Path] = None
         try:
             if "mesh_path" not in inputs:
                 raise ValueError("mesh_path is required for mesh retopology")
@@ -72,7 +98,7 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
             if not mesh_path.exists():
                 raise FileNotFoundError(f"Input mesh file not found: {mesh_path}")
 
-            output_format = inputs.get("output_format", "obj")
+            output_format = inputs.get("output_format", "glb")
             if output_format not in ["obj", "glb", "ply"]:
                 raise ValueError(f"Unsupported output format: {output_format}")
 
@@ -95,9 +121,10 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
                 self.model_id, base_name, output_format
             )
             cli_out = final_path.with_suffix(".obj")
+            cli_input, tmp_dir = self._cli_input_for_mesh(mesh_path, original_mesh)
 
             run_instant_meshes(
-                mesh_path,
+                cli_input,
                 cli_out,
                 target_vertex_count=target_vertices,
                 target_face_count=target_faces,
@@ -105,11 +132,19 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
                 smooth_iterations=smooth_iterations,
             )
 
+            remeshed = self.mesh_processor.load_mesh(cli_out)
+            # Instant Meshes often leaves boundary holes on organic AIGC meshes.
+            try:
+                if hasattr(remeshed, "fill_holes"):
+                    remeshed.fill_holes()
+            except Exception as fill_err:
+                logger.warning("Instant Meshes fill_holes skipped: %s", fill_err)
+
             if output_format == "obj":
+                self.mesh_processor.save_mesh(remeshed, cli_out, do_normalise=False)
                 output_path = cli_out
             else:
-                converted = self.mesh_processor.load_mesh(cli_out)
-                self.mesh_processor.save_mesh(converted, final_path)
+                self.mesh_processor.save_mesh(remeshed, final_path, do_normalise=False)
                 output_path = final_path
 
             final_mesh = self.mesh_processor.load_mesh(output_path)
@@ -148,6 +183,9 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
             self.status = ModelStatus.ERROR
             logger.error("Instant Meshes retopology failed: %s", e)
             raise Exception(f"Instant Meshes retopology failed: {e}") from e
+        finally:
+            if tmp_dir is not None:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def get_supported_formats(self) -> Dict[str, List[str]]:
         return {
@@ -160,10 +198,10 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
             "parameters": {
                 "target_vertex_count": {
                     "type": "integer",
-                    "description": "Desired output vertex count (-v)",
+                    "description": "Desired output vertex count (-v). Hard-surface only — organic AIGC characters often get holes; prefer trimesh_decimate.",
                     "default": self.default_target_vertex_count,
                     "minimum": 100,
-                    "maximum": 20000,
+                    "maximum": 200000,
                     "required": False,
                 },
                 "target_face_count": {
@@ -190,8 +228,8 @@ class InstantMeshesRetopologyAdapter(MeshRetopologyModel):
                 },
                 "output_format": {
                     "type": "string",
-                    "description": "Output mesh format",
-                    "default": "obj",
+                    "description": "Output mesh format (textures are not transferred from Instant Meshes remesh)",
+                    "default": "glb",
                     "enum": ["obj", "glb", "ply"],
                     "required": False,
                 },

@@ -41,6 +41,8 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | `voxhammer_text_mesh_editing` | VoxHammer + TRELLIS | MIT | **OK** | TRELLIS weights MIT |
 | `voxhammer_image_mesh_editing` | VoxHammer + TRELLIS | MIT | **OK** | |
 | `kimodo_text_to_motion` | `Kimodo-SOMA-RP-v1.1` (+ `nv-tlabs/kimodo` code) | NVIDIA Open Model + Apache-2.0 | **CONDITIONAL** | **Ship SOMA-RP only.** Do not enable SMPL-X/G1 variants (see Kimodo section). |
+| `krea2_turbo_text_to_image` | `krea/Krea-2-Turbo` (+ `Qwen/Qwen3-VL-4B-Instruct` text encoder) | [Krea 2 Community License](https://www.krea.ai/krea-2-licensing) | **CONDITIONAL** | **Local inference only** (diffusers `Krea2Pipeline`); commercial if revenue &lt; $1M/yr + content filters; Enterprise license above threshold |
+| `krea2_raw_text_to_image` | `krea/Krea-2-Raw` | Krea 2 Community License | **CONDITIONAL** | Same as Turbo; **disabled by default** — undistilled base for LoRA training, not production inference |
 
 ---
 
@@ -116,6 +118,17 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | Output **NPZ** / **studio_motion.json** | Generated at inference | Governed by model license + your ToS | **OK** (typical) | User prompts → motion artifacts; do not redistribute pretrained weights. |
 
 **Audit conclusion:** **No conflict** if the API stays on **Kimodo-SOMA-RP-v1.1** only. **SMPL-X NPZ weights are BLOCKED** for commercial OpenNexus3DStudio — same class as NVIDIA PartField/PartPacker R&D licenses. G1/SOMA NPZ checkpoint families other than SOMA-RP-v1.1 need separate legal review before enabling.
+
+### Krea 2 (`krea2_turbo_text_to_image`, `krea2_raw_text_to_image`)
+
+| Asset | Source | License | Commercial | Action |
+|-------|--------|---------|--------------|--------|
+| **Krea 2 Turbo** (default inference) | [krea/Krea-2-Turbo](https://huggingface.co/krea/Krea-2-Turbo) | Krea 2 Community License | **CONDITIONAL** | **Local open weights** via diffusers — **does not call** [api.krea.ai](https://docs.krea.ai/api-reference/introduction). Commercial use permitted under community license if trailing-12-month revenue **&lt; USD $1M**; implement **content filters** (license §4.2); contact opensource@krea.ai for Enterprise above threshold. |
+| **Krea 2 Raw** (LoRA / research base) | [krea/Krea-2-Raw](https://huggingface.co/krea/Krea-2-Raw) | Krea 2 Community License | **CONDITIONAL** | Same license constraints. Upstream recommends **train LoRAs on Raw, run on Turbo** — keep Raw route `enabled: false` unless needed. |
+| Text encoder | `Qwen/Qwen3-VL-4B-Instruct` | Qwen / Apache-2.0 (typical) | **OK** | Bundled in diffusers pipeline; verify HF model card on upgrade. |
+| Inference code (optional) | [krea-ai/krea-2](https://github.com/krea-ai/krea-2) | Apache-2.0 | **OK** | Official minimal inference; 3DAIGC-API uses diffusers instead. |
+
+**Product choice:** Ship **`krea2_turbo_text_to_image`** for best quality/speed (8 steps, up to 2K). Do **not** use Krea hosted API for production unless you want a separate SaaS dependency and billing.
 
 ---
 
@@ -195,7 +208,7 @@ Use this when shipping OpenNexus3DStudio. **Integration effort** is approximate 
 ### Recommended OpenNexus3DStudio path (minimal new work)
 
 1. **Segmentation:** **`p3sam_mesh_segmentation`** — enabled in `config/models.yaml` (Tencent **CONDITIONAL**).
-2. **Retopo:** **`instant_meshes_retopology`** — enabled; build binary via `./scripts/install_instant_meshes.sh` or set `INSTANT_MESHES_BIN`.
+2. **Retopo / reduce:** **`autoremesher_retopology`** (MIT, organic remesh), **`instant_meshes_retopology`** (BSD-3, hard-surface remesh), or **`trimesh_decimate`** (MIT, triangle decimate without remesh). Build remesh binaries via `./scripts/install_autoremesher.sh` / `./scripts/install_instant_meshes.sh`.
 3. **UV:** **`xatlas_uv_unwrapping`** — enabled (MIT `xatlas` pip package); optional v2 with P3-SAM part splits.
 
 | Model ID | License | Config |
@@ -203,6 +216,8 @@ Use this when shipping OpenNexus3DStudio. **Integration effort** is approximate 
 | `p3sam_mesh_segmentation` | Tencent 3D-Part (CONDITIONAL) | `enabled: true` |
 | `xatlas_uv_unwrapping` | MIT (xatlas) | `enabled: true` |
 | `instant_meshes_retopology` | BSD-3-Clause | `enabled: true` (binary required) |
+| `autoremesher_retopology` | MIT | `enabled: true` (binary required) |
+| `trimesh_decimate` | MIT (trimesh) | `enabled: true` (no binary) |
 
 ---
 

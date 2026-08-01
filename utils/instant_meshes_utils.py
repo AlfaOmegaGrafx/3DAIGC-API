@@ -17,6 +17,9 @@ from typing import Any, Dict, Optional, Union
 
 logger = logging.getLogger(__name__)
 
+# Instant Meshes meshio only accepts these extensions (see thirdparty meshio.cpp).
+INSTANT_MESHES_INPUT_EXTS = frozenset({".obj", ".ply", ".aln"})
+
 _REPO_REL = Path("thirdparty/instant-meshes")
 _BUILD_CANDIDATES = (
     _REPO_REL / "build" / "Instant Meshes",

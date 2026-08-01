@@ -77,7 +77,7 @@ async def run_scheduler_service(redis_url: str):
         redis_queue_instance = RedisJobQueue(
             redis_url=redis_url,
             queue_prefix="3daigc",
-            max_job_age_hours=24,
+            max_job_age_hours=168,
         )
         await redis_queue_instance.connect()
         logger.info("✓ Connected to Redis")

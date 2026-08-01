@@ -1,0 +1,7 @@
+# HuggingFace / transformers stack — pin for TRELLIS.2, Kimodo-adjacent imports, BiRefNet, DINOv3.
+# Install: ./venv/bin/pip install -c scripts/constraints-hf.txt -r requirements.txt
+# Drift check: bash scripts/check_venv_drift.sh
+transformers==4.57.3
+huggingface_hub>=0.34.0,<1.0
+tokenizers>=0.22.0,<=0.23.0
+safetensors>=0.4.0

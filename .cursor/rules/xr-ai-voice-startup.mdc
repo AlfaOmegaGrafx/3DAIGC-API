@@ -1,0 +1,49 @@
+---
+description: XR voice startup — DGX hub + Surface :8443 proxy (Galaxy XR)
+alwaysApply: true
+---
+
+# XR AI voice — start procedure (do not skip Surface proxy)
+
+When the user asks to **start XR voice / XRAI / voice server**:
+
+## One command (DGX)
+
+```bash
+bash /home/sifr/3DAIGC-API/mcp/scripts/start_xr_voice_full.sh
+```
+
+Verify:
+
+```bash
+bash /home/sifr/3DAIGC-API/mcp/scripts/verify_xr_voice_stack.sh
+```
+
+## Two machines (both required for Galaxy XR)
+
+| Machine | Service | Port | URL |
+|---------|---------|------|-----|
+| **DGX** | xr-ai hub (`daigc_vlm_example`) | **8088** | `https://10.0.0.158:8088` |
+| **Surface** | `xr-spark-hub-proxy.mjs` | **8443** | `https://10.0.0.32:8443` ← **headset uses this** |
+
+Router **client isolation** blocks headset → DGX. Starting only DGX leaves `10.0.0.32:8443` **connection refused**.
+
+## Surface proxy — critical
+
+- **Do not** rely on `Start-Process` / `start /B` over SSH — Node exits within seconds.
+- **Do** use `mcp/scripts/ensure_surface_xr_hub_proxy.sh` (Windows scheduled task `OpenNexusXRHubProxy`).
+- Firewall: inbound TCP **8443** (`OpenNexus XR Hub Proxy` rule).
+- Manual on Surface: `npm run xr-hub-proxy` or `npm run dev:spark-proxies` in a **persistent** terminal.
+
+## Common mistakes
+
+- `https://10.0.0.32` (no port) → refused (nothing on 443)
+- `http://10.0.0.32:8443` → wrong (proxy is HTTPS only)
+- DGX-only start when user tests from **Galaxy XR**
+
+## Logs
+
+- DGX: `3DAIGC-API/logs/xr-ai-stack.log`, `mcp/scripts/monitor_xr_ai_3daigc_stack.sh`
+- Surface: `OpenNexus3DStudio/logs/xr-hub-proxy.log`
+
+Ops doc: `memory-bank/xr-ai-voice-ops.md`

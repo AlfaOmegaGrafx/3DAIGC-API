@@ -108,7 +108,7 @@ async def lifespan(app: FastAPI):
         redis_job_queue = RedisJobQueue(
             redis_url=redis_url,
             queue_prefix="3daigc",
-            max_job_age_hours=24,
+            max_job_age_hours=168,
         )
         await redis_job_queue.connect()
 

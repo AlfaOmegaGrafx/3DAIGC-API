@@ -750,6 +750,19 @@ async def get_jobs_history(
         end_idx = min(offset + limit, total_jobs)
         paginated_jobs = all_jobs[start_idx:end_idx]
 
+        # Relative download URLs for Sync (host-agnostic; works for mesh + image jobs).
+        for job_dict in paginated_jobs:
+            if job_dict.get("status") != "completed":
+                continue
+            job_id = job_dict.get("job_id")
+            if not job_id:
+                continue
+            result = job_dict.get("result")
+            if not isinstance(result, dict):
+                continue
+            if not result.get("mesh_url"):
+                result["mesh_url"] = f"/api/v1/system/jobs/{job_id}/download"
+
         return {
             "jobs": paginated_jobs,
             "pagination": {

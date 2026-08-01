@@ -40,7 +40,9 @@ class RedisJobQueue:
         self,
         redis_url: str = "redis://localhost:6379",
         queue_prefix: str = "3daigc",
-        max_job_age_hours: int = 24,
+        # Keep Sync/history usable longer than a workday; files on disk can outlive
+        # this, but Studio Sync only sees jobs still present in Redis.
+        max_job_age_hours: int = 168,
     ):
         self.redis_url = redis_url
         self.queue_prefix = queue_prefix
@@ -196,11 +198,9 @@ class RedisJobQueue:
             job_data["completed_at"] = format_job_timestamp(job_now())
             await self.redis.hset(self.jobs_hash_key, job_id, json.dumps(job_data))
         
-        # Store result
+        # Store result (hash fields have no per-field TTL; cleanup_old_jobs
+        # removes aged jobs + results using max_job_age_hours).
         await self.redis.hset(self.results_hash_key, job_id, json.dumps(result))
-        
-        # Set expiration for result (24 hours)
-        await self.redis.expire(f"{self.results_hash_key}:{job_id}", 86400)
 
     async def fail_job(self, job_id: str, error: str):
         """Mark job as failed"""
@@ -397,8 +397,20 @@ class RedisJobQueue:
         for job_id, job_data_str in all_jobs.items():
             try:
                 job_data = json.loads(job_data_str)
-                if job_data.get("status") == target_status:
-                    matching_jobs.append(self._job_request_from_redis(job_id, job_data))
+                if job_data.get("status") != target_status:
+                    continue
+                job = self._job_request_from_redis(job_id, job_data)
+                # History must include results so Studio Sync can resolve download URLs.
+                if job_data.get("status") == _status_to_str(JobStatus.COMPLETED):
+                    result_str = await self.redis.hget(self.results_hash_key, job_id)
+                    if result_str:
+                        try:
+                            job.result = json.loads(result_str)
+                        except Exception as parse_err:
+                            logger.error(
+                                f"Error parsing result for job {job_id}: {parse_err}"
+                            )
+                matching_jobs.append(job)
             except Exception as e:
                 logger.error(f"Error parsing job {job_id}: {e}")
                 continue

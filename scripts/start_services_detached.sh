@@ -34,6 +34,21 @@ export PYTHONPATH="${PYTHONPATH:-}${PYTHONPATH:+:}$ROOT"
 export P3D_DRAIN_JOBS_ON_SHUTDOWN=1
 export P3D_SHUTDOWN_DRAIN_SEC="${P3D_SHUTDOWN_DRAIN_SEC:-7200}"
 
+# Optional remesh/decimate CLIs (adapters also search thirdparty/ + PATH).
+if [[ -z "${AUTOREMESHER_BIN:-}" && -x "$ROOT/thirdparty/autoremesher/autoremesher" ]]; then
+  export AUTOREMESHER_BIN="$ROOT/thirdparty/autoremesher/autoremesher"
+fi
+if [[ -z "${INSTANT_MESHES_BIN:-}" ]]; then
+  for _im in "$ROOT/thirdparty/instant-meshes/build/Instant Meshes" \
+             "$ROOT/thirdparty/instant-meshes/build/instant-meshes"; do
+    if [[ -x "$_im" ]]; then
+      export INSTANT_MESHES_BIN="$_im"
+      break
+    fi
+  done
+fi
+unset _im
+
 nohup "$ROOT/venv/bin/python" scripts/scheduler_service.py \
   --redis-url "${P3D_REDIS_URL:-redis://localhost:6379}" \
   >> logs/scheduler.log 2>&1 &
