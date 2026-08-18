@@ -27,6 +27,20 @@ profiles:
       seed: 42
       output_format: png
 
+  mage_flow_edit_turbo:
+    module: adapters.mage_flow_edit_adapter
+    class: MageFlowEditTurboAdapter
+    timeout_sec: 3600
+    skip_infer: true  # heavy isolated-venv cold load; enable after setup_mage_flow_edit.sh smoke
+    inputs:
+      image_path: "{image}"
+      text_prompt: "make the background plain white"
+      num_inference_steps: 4
+      guidance_scale: 1.0
+      max_size: 512
+      seed: 42
+      output_format: png
+
   trellis_text_to_textured_mesh:
     module: adapters.trellis_adapter
     class: TrellisTextToTexturedMeshAdapter

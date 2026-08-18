@@ -34,6 +34,21 @@ text_to_image:
     init_params:
       hf_model_id: "krea/Krea-2-Raw"
 
+# instruction-based image editing (Mage-Flow-Edit-Turbo — isolated .venv-mage-flow)
+image_edit:
+  mage_flow_edit_turbo:
+    vram_requirement: 20480  # MB — ~18–20GB peak at 1024² (A100); unload via subprocess exit
+    supported_inputs: ["image", "text"]
+    supported_outputs: ["png", "webp"]
+    model_path: "pretrained/mage-flow/Mage-Flow-Edit-Turbo"
+    enabled: true
+    max_workers: 1
+    worker_load_timeout_sec: 1800
+    license_note: "MIT (microsoft/Mage code). Weights from mage-flow-community mirror — official microsoft/Mage-Flow-Edit-Turbo HF host withdrawn. See docs/MODEL_LICENSES.md."
+    init_params:
+      hf_model_id: "mage-flow-community/Mage-Flow-Edit-Turbo"
+      hf_revision: "66df6fa1aba5b40cd4120739134292eab9779da3"
+
 # text-conditioned geometry/geometry+texture generation
 text_to_textured_mesh:
   trellis_text_to_textured_mesh:
@@ -178,6 +193,13 @@ environment_scan:
     model_path: "outputs/worlds"
     enabled: true
     max_workers: 1
+  env_mesh_bake:
+    vram_requirement: 10240  # MB — gsplat depth render + TSDF bake → GLB
+    supported_inputs: ["json"]
+    supported_outputs: ["glb", "json"]
+    model_path: "outputs/worlds"
+    enabled: true
+    max_workers: 1
 
 # image-conditioned Gaussian splat generation (Spark.js / WebXR)
 image_to_splat:
@@ -225,7 +247,7 @@ auto_rig:
   unirig_auto_rig:
     vram_requirement: 9216  # MB
     supported_inputs: ["obj", "glb", "fbx"]
-    supported_outputs: ["glb", "fbx"]
+    supported_outputs: ["glb", "fbx", "vrm"]
     model_path: "thirdparty/UniRig"
     enabled: true
     max_workers: 1
@@ -348,3 +370,14 @@ text_to_motion:
     license_note: "Ship Kimodo-SOMA-RP-v1.1 only (NVIDIA Open Model — CONDITIONAL). Kimodo-SMPLX-RP-v1 is BLOCKED (R&D license). See docs/MODEL_LICENSES.md."
     init_params:
       hf_model_id: "Kimodo-SOMA-RP-v1.1"
+
+# Arc2Avatar — photoreal FLAME head 3DGS (SDS train; not body VRM)
+# Enable after: clone thirdparty/Arc2Avatar, download_models.py, ARC2AVATAR_PYTHON
+arc2avatar_head:
+  arc2avatar_head:
+    vram_requirement: 24576  # MB — SDS train; schedule alone
+    supported_inputs: ["image"]
+    supported_outputs: ["ply"]
+    model_path: "thirdparty/Arc2Avatar"
+    enabled: true
+    max_workers: 1

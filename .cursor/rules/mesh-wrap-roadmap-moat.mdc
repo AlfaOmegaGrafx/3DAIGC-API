@@ -1,0 +1,18 @@
+---
+description: Mesh wrap + FUTURE_RD are gitignored moat — never commit full roadmaps
+alwaysApply: true
+---
+
+# Mesh wrap / Future R&D moat (3DAIGC-API)
+
+| Moat (gitignored, scp only) | Public stub |
+|-----------------------------|-------------|
+| `MESH_WRAP_ROADMAP.md` (API **repo root**) | `docs/MESH_WRAP_ROADMAP.md` |
+| OpenNexus `FUTURE_RD.md` (Studio **repo root**) | OpenNexus `docs/FUTURE_RD.md` |
+
+## Rules
+
+1. Edit the **root** moat files for real wrap roadmap / parked R&D (e.g. Anny).
+2. **Never** `git add` root `MESH_WRAP_ROADMAP.md` or paste Anny/aging R&D verdicts into tracked API docs.
+3. Sync moat via scp (`sync-changes-to-pc.sh` / Surface sync), not git.
+4. Tracked `docs/AVATAR_PIPELINE.md` may stay public-safe overview only.

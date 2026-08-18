@@ -470,7 +470,10 @@ restart_last_pid.txt
 uploads/
 
 # Moat / internal strategy (never commit)
-memory-bank/creature-rig-pipeline-plan.md
+# Entire memory-bank is local-only (align with OpenNexus) — never commit/push
+memory-bank/
+# Full wrap roadmap (repo root only). Public stub stays tracked at docs/MESH_WRAP_ROADMAP.md
+/MESH_WRAP_ROADMAP.md
 # Moat — creature / appearance auto-rig (local only; never commit/push)
 adapters/creature_template_adapter.py
 adapters/appearance_component_adapter.py
@@ -486,5 +489,3 @@ scripts/blender_mcp_load_job.py
 scripts/list_blender_mcp_targets.py
 tests/test_creature_template_rig.py
 tests/test_appearance_component_slots.py
-memory-bank/blender-mcp-agent-only.md
-memory-bank/blender-mcp-iteration-map.md

@@ -834,8 +834,10 @@ async def get_job_status(job_id: str, request: Request):
                     break
 
             if mesh_path and os.path.exists(mesh_path):
-                # Create URL for mesh file
-                mesh_url = f"{request.base_url}api/v1/system/jobs/{job_id}/download"
+                # Host-agnostic path — clients rebase via their API endpoint / Vite proxy.
+                # Absolute request.base_url often becomes http://127.0.0.1:7842 which
+                # breaks remote Studio (Surface) fetches (mixed content / wrong host).
+                mesh_url = f"/api/v1/system/jobs/{job_id}/download"
                 result["mesh_url"] = mesh_url
 
                 # Add file info

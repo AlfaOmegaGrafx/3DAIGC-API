@@ -209,6 +209,13 @@ class EnvironmentScanRequest(BaseModel):
         le=50000,
         description="Phase B training steps when train_3dgs is true",
     )
+    bake_env_mesh: bool = Field(
+        False,
+        description=(
+            "After Phase A/B, bake environment_mesh.glb via gsplat depth + TSDF "
+            "(OMB/RP1). Requires cameras; off by default (expensive)."
+        ),
+    )
 
     model_config = ConfigDict(protected_namespaces=("settings_",))
 
@@ -223,6 +230,26 @@ class Train3dgsRequest(BaseModel):
         None, description="Optional image cap (even stride) for faster/smoke trains"
     )
     model_preference: str = Field("env_scan_gsplat_train")
+
+    model_config = ConfigDict(protected_namespaces=("settings_",))
+
+
+class BakeEnvMeshRequest(BaseModel):
+    """Bake OMB-ready environment GLB from an existing multi-view world (gs_dataset/)."""
+
+    world_id: str = Field(..., description="Existing world job id under outputs/worlds/")
+    quality: str = Field(
+        "photo",
+        description="draft | balanced | photo — photo = denser mesh + vertex colors for studio",
+    )
+    target_face_count: Optional[int] = Field(None, ge=1000, le=500_000)
+    voxel_resolution: Optional[int] = Field(None, ge=64, le=384)
+    max_views: Optional[int] = Field(None, ge=2, le=200)
+    data_factor: Optional[int] = Field(None, ge=1, le=8)
+    color_export: Optional[str] = Field(
+        None, description="vertex (studio) or atlas (OMB face-island PBR)"
+    )
+    model_preference: str = Field("env_mesh_bake")
 
     model_config = ConfigDict(protected_namespaces=("settings_",))
 
@@ -280,6 +307,7 @@ async def environment_scan(
             "refine_to_3dgs": request.refine_to_3dgs,
             "train_3dgs": request.train_3dgs,
             "train_3dgs_steps": request.train_3dgs_steps,
+            "bake_env_mesh": request.bake_env_mesh,
             "metric_calibration": (
                 request.metric_calibration.model_dump(exclude_none=True)
                 if request.metric_calibration
@@ -369,4 +397,67 @@ async def train_env_scan_3dgs(
         raise
     except Exception as e:
         logger.error("Error scheduling train-3dgs job: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/bake-env-mesh", response_model=MeshGenerationResponse)
+async def bake_env_mesh(
+    request: BakeEnvMeshRequest,
+    scheduler: MultiprocessModelScheduler = Depends(get_scheduler),
+    current_user=Depends(get_current_user_or_none),
+):
+    """
+    Bake ``environment_mesh.glb`` (+ collider) for RP1/OMB from a multi-view world.
+
+    Requires ``gs_dataset/`` (LingBot Phase A). TripoSplat image-to-world has no
+    cameras — returns 400; publish TRELLIS props instead.
+    """
+    try:
+        user_id = current_user.user_id if current_user else None
+        world_root = Path("outputs") / "worlds" / request.world_id
+        if not world_root.is_dir():
+            raise HTTPException(
+                status_code=404, detail=f"World not found: {request.world_id}"
+            )
+        if not (world_root / "gs_dataset").is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Missing gs_dataset/ — TripoSplat image-to-world cannot bake. "
+                    "Use World Library RP1 for TRELLIS props, or run LingBot "
+                    "environment-scan with refine_to_3dgs first."
+                ),
+            )
+
+        validate_model_preference(
+            request.model_preference, "environment_scan", scheduler
+        )
+        inputs: Dict[str, Any] = {
+            "world_id": request.world_id,
+            "world_directory": str(world_root),
+            "quality": request.quality,
+            "target_face_count": request.target_face_count,
+            "voxel_resolution": request.voxel_resolution,
+            "max_views": request.max_views,
+            "data_factor": request.data_factor,
+            "color_export": request.color_export,
+        }
+        job_request = JobRequest(
+            feature="environment_scan",
+            inputs=inputs,
+            model_preference=request.model_preference,
+            priority=1,
+            metadata={"feature_type": "environment_scan", "phase": "env_mesh_bake"},
+            user_id=user_id,
+        )
+        job_id = await scheduler.schedule_job(job_request)
+        return MeshGenerationResponse(
+            job_id=job_id,
+            status="queued",
+            message=f"Env mesh bake queued for world {request.world_id}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error scheduling bake-env-mesh job: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e

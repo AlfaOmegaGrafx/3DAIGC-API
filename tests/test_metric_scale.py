@@ -37,12 +37,14 @@ def test_resolve_reference_length():
     assert resolved["scale"] == pytest.approx(2.0)
     assert resolved["one_to_one"] is True
     assert resolved["units"] == "meters"
+    assert resolved["axis"] == "horizontal"
 
 
 def test_resolve_player_height_default():
     resolved = resolve_metric_calibration({"mode": "player_height", "recon_height": 0.8})
     assert resolved["true_meters"] == pytest.approx(1.6)
     assert resolved["scale"] == pytest.approx(2.0)
+    assert resolved["axis"] == "uniform"
 
 
 def test_apply_metric_scale_to_manifest():
@@ -63,16 +65,38 @@ def test_apply_metric_scale_to_manifest():
             }
         ],
     }
+    # reference_length without axis defaults to horizontal (Office door lock).
     out = apply_metric_scale_to_manifest(
         manifest,
         {"mode": "reference_length", "true_meters": 2.0, "recon_length": 1.0},
     )
-    assert out["environment"]["transform"]["scale"] == pytest.approx([2.0, 2.0, 2.0])
+    assert out["environment"]["transform"]["scale"] == pytest.approx([2.0, 1.0, 2.0])
     assert out["props"][0]["transform"]["position"] == pytest.approx([2.0, 0.0, -4.0])
-    assert out["props"][0]["transform"]["scale"] == pytest.approx([2.0, 2.0, 2.0])
+    assert out["props"][0]["transform"]["scale"] == pytest.approx([2.0, 1.0, 2.0])
     assert out["spawn"]["player_height"] == 1.6
     assert out["metadata"]["coordinate_units"] == "meters"
     assert out["metadata"]["metric_calibration"]["one_to_one"] is True
+    assert out["metadata"]["metric_calibration"]["axis"] == "horizontal"
+
+    # Explicit uniform still stretches XYZ when requested.
+    out_u = apply_metric_scale_to_manifest(
+        manifest,
+        {
+            "mode": "reference_length",
+            "axis": "uniform",
+            "true_meters": 2.0,
+            "recon_length": 1.0,
+        },
+    )
+    assert out_u["environment"]["transform"]["scale"] == pytest.approx([2.0, 2.0, 2.0])
+
+
+def test_resolve_reference_length_defaults_horizontal():
+    resolved = resolve_metric_calibration(
+        {"mode": "reference_length", "true_meters": 0.762, "recon_length": 0.47}
+    )
+    assert resolved["axis"] == "horizontal"
+    assert resolved["scale"] == pytest.approx(0.762 / 0.47)
 
 
 def test_apply_horizontal_door_width_keeps_height():

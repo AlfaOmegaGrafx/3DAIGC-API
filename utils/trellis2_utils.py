@@ -238,29 +238,56 @@ class Trellis2Runner:
         # Export to GLB format
         if self.o_voxel is not None:
             logger.info("Exporting mesh to GLB format...")
-            glb = self.o_voxel.postprocess.to_glb(
-                vertices=mesh.vertices,
-                faces=mesh.faces,
-                attr_volume=mesh.attrs,
-                coords=mesh.coords,
-                attr_layout=mesh.layout,
-                voxel_size=mesh.voxel_size,
-                aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-                decimation_target=decimation_target,
-                texture_size=texture_size,
-                remesh=remesh,
-                remesh_band=remesh_band,
-                remesh_project=remesh_project,
-                verbose=verbose
-            )
-            
+
+            def _to_glb(use_remesh: bool):
+                return self.o_voxel.postprocess.to_glb(
+                    vertices=mesh.vertices,
+                    faces=mesh.faces,
+                    attr_volume=mesh.attrs,
+                    coords=mesh.coords,
+                    attr_layout=mesh.layout,
+                    voxel_size=mesh.voxel_size,
+                    aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+                    decimation_target=decimation_target,
+                    texture_size=texture_size,
+                    remesh=use_remesh,
+                    remesh_band=remesh_band,
+                    remesh_project=remesh_project,
+                    verbose=verbose,
+                )
+
+            def _is_cumesh_cuda_config_error(exc: BaseException) -> bool:
+                msg = str(exc)
+                return (
+                    "CuMesh" in msg
+                    or "cumesh" in msg.lower()
+                    or "connectivity.cu" in msg
+                    or "invalid configuration argument" in msg
+                    or "Error code: 9" in msg
+                )
+
+            try:
+                glb = _to_glb(remesh)
+            except Exception as exc:
+                # GB10 / degenerate meshes: CuMesh can launch <<<0, BLOCK>>> in
+                # connectivity.cu during remesh/cleanup. Retry without remesh.
+                if remesh and _is_cumesh_cuda_config_error(exc):
+                    logger.warning(
+                        "CuMesh postprocess failed with remesh=True (%s); "
+                        "retrying to_glb with remesh=False",
+                        exc,
+                    )
+                    glb = _to_glb(False)
+                else:
+                    raise
+
             # Convert GLB to trimesh
             import tempfile
             with tempfile.NamedTemporaryFile(suffix=".glb", delete=False) as tmp:
                 glb.export(tmp.name)
                 output_mesh = trimesh.load(tmp.name, force="mesh")
                 os.unlink(tmp.name)
-            
+
             return output_mesh
         else:
             logger.warning("o_voxel not available, returning raw mesh")

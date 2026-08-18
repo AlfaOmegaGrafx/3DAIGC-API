@@ -45,6 +45,8 @@ scripts/run_server.sh
 
 # --- UniRig / rig textures ---
 .cursor/rules/unirig-rig-textures.mdc
+scripts/blender/apply_humanoid_template_rig.py
+scripts/blender/apply_humanoid_template_wrap.py
 
 # --- Agent ops ---
 .cursor/rules/agent-run-instructions.mdc

@@ -1290,6 +1290,7 @@ def run_environment_scan(
     refine_to_3dgs: bool = False,
     train_3dgs: bool = False,
     train_3dgs_steps: int = 7000,
+    bake_env_mesh: bool = False,
 ) -> Dict[str, Any]:
     """
     Full scan: frames → LingBot-Map → metric world package.
@@ -1298,6 +1299,9 @@ def run_environment_scan(
     Spark-compatible isotropic Gaussians and exports COLMAP for Phase B training.
 
     If ``train_3dgs`` is True, Phase B gsplat train runs after Phase A (implies A).
+
+    If ``bake_env_mesh`` is True, after Phase A (or B) bake ``environment_mesh.glb``
+    for RP1/OMB (requires ``gs_dataset/``).
 
     If LingBot is not installed, raises RuntimeError (caller surfaces as job failure).
     """
@@ -1340,6 +1344,14 @@ def run_environment_scan(
         mins = arr.min(axis=0)
         maxs = arr.max(axis=0)
         diag = float(np.linalg.norm(maxs - mins))
+        true_m = float(cal["true_meters"])
+        if true_m < 1.5:
+            logger.warning(
+                "auto_bbox true_meters=%.4g m looks like a door/furniture size, not room span; "
+                "this will shrink the whole world to ~that diagonal. Prefer reference_length "
+                "for doors, or set true_meters to the real room diagonal (≥1.5–4+ m).",
+                true_m,
+            )
         cal["mode"] = "reference_length"
         cal["recon_length"] = diag
         # Interpret true_meters as real-world length of the dominant room span
@@ -1433,6 +1445,33 @@ def run_environment_scan(
             gaussian_train.get("final_loss"),
         )
 
+    env_mesh_bake = None
+    if bake_env_mesh:
+        from core.utils.world_env_mesh_bake import (
+            EnvMeshBakeConfig,
+            bake_world_env_mesh,
+            world_has_bake_cameras,
+        )
+
+        if not world_has_bake_cameras(root):
+            logger.warning(
+                "bake_env_mesh skipped: missing gs_dataset/ cameras "
+                "(set refine_to_3dgs for Phase A)"
+            )
+            env_mesh_bake = {"success": False, "error": "missing gs_dataset cameras"}
+        else:
+            try:
+                env_mesh_bake = bake_world_env_mesh(root, cfg=EnvMeshBakeConfig())
+                logger.info(
+                    "Env mesh bake: %s faces → %s",
+                    env_mesh_bake.get("decimate", {}).get("after_faces"),
+                    env_mesh_bake.get("mesh_url"),
+                )
+            except Exception as bake_exc:
+                # Phase A/B twin must still succeed; Bake / POST /bake-env-mesh can retry.
+                logger.exception("Env mesh bake failed (world kept): %s", bake_exc)
+                env_mesh_bake = {"success": False, "error": str(bake_exc)}
+
     manifest_path = root / "world.manifest.json"
     ply_path = root / "environment.ply"
     package.update(
@@ -1445,6 +1484,7 @@ def run_environment_scan(
             "success": True,
             "gaussian_refine": gaussian_info,
             "gaussian_train": gaussian_train,
+            "env_mesh_bake": env_mesh_bake,
         }
     )
     return package

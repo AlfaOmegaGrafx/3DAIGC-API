@@ -13,8 +13,9 @@
 
 - **[AVATAR_PIPELINE.md](AVATAR_PIPELINE.md)** — Photo → mesh → template VRM rig → VRM export
 - **[API_AVATAR_RIG_CONTRACT.md](API_AVATAR_RIG_CONTRACT.md)** — Rig validation contract for skinned GLB exports
-- **[MESH_WRAP_ROADMAP.md](MESH_WRAP_ROADMAP.md)** — Blend-shape transfer via mesh wrap (roadmap)
+- **[MESH_WRAP_ROADMAP.md](MESH_WRAP_ROADMAP.md)** — Public stub; **full roadmap is gitignored** at repo-root `MESH_WRAP_ROADMAP.md` (scp only)
 - **[ARC2AVATAR_TRACK.md](ARC2AVATAR_TRACK.md)** — Arc2Avatar Gaussian head integration (stub)
+- **Future R&D** — OpenNexus repo-root `FUTURE_RD.md` (gitignored moat); stub `OpenNexus3DStudio/docs/FUTURE_RD.md`
 
 Frontend: [github.com/AlfaOmegaGrafx/OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio)
 

@@ -1,13 +1,18 @@
-"""Image generation API — local text-to-image (Krea 2 open weights, no Krea cloud API)."""
+"""Image generation API — text-to-image (Krea) + image-edit (Mage-Flow-Edit)."""
 
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from api.dependencies import get_current_user_or_none, get_scheduler
-from api.routers.mesh_generation import MeshGenerationResponse, validate_model_preference
+from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
+from api.routers.mesh_generation import (
+    MeshGenerationResponse,
+    process_file_input,
+    validate_model_preference,
+)
+from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
 from core.scheduler.multiprocess_scheduler import MultiprocessModelScheduler
 
@@ -93,4 +98,110 @@ async def text_to_image(
         raise
     except Exception as e:
         logger.error("Error scheduling text-to-image job: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class ImageEditRequest(BaseModel):
+    """Image + edit instruction → edited raster image (PNG/WebP)."""
+
+    text_prompt: str = Field(..., description="Edit instruction (natural language)")
+    image_path: Optional[str] = Field(None, description="Path to input image")
+    image_base64: Optional[str] = Field(None, description="Base64-encoded input image")
+    image_file_id: Optional[str] = Field(None, description="Uploaded file id")
+    output_format: str = Field("png", description="png or webp")
+    model_preference: str = Field(
+        "mage_flow_edit_turbo",
+        description="Image-edit model (default: Mage-Flow-Edit-Turbo)",
+    )
+    model_parameters: Optional[dict] = Field(
+        None,
+        description="Optional: num_inference_steps, guidance_scale, max_size, seed, width, height",
+    )
+
+    model_config = ConfigDict(protected_namespaces=("settings_",))
+
+    @field_validator("output_format")
+    @classmethod
+    def validate_output_format(cls, v):
+        allowed = ["png", "webp"]
+        if v not in allowed:
+            raise ValueError(f"output_format must be one of: {allowed}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_image_source(self):
+        provided = sum(
+            bool(x) for x in [self.image_path, self.image_base64, self.image_file_id]
+        )
+        if provided == 0:
+            raise ValueError(
+                "One of image_path, image_base64, or image_file_id must be provided"
+            )
+        if provided > 1:
+            raise ValueError(
+                "Only one of image_path, image_base64, or image_file_id should be provided"
+            )
+        return self
+
+
+@router.post("/image-edit", response_model=MeshGenerationResponse)
+async def image_edit(
+    request: ImageEditRequest,
+    scheduler: MultiprocessModelScheduler = Depends(get_scheduler),
+    file_store: Optional[FileStore] = Depends(get_file_store),
+    current_user=Depends(get_current_user_or_none),
+):
+    """Instruction-based image edit via Mage-Flow-Edit-Turbo (isolated venv)."""
+    try:
+        user_id = current_user.user_id if current_user else None
+
+        validate_model_preference(request.model_preference, "image_edit", scheduler)
+
+        image_file_path = await process_file_input(
+            file_path=request.image_path,
+            base64_data=request.image_base64,
+            file_id=request.image_file_id,
+            input_type="image",
+            file_store=file_store,
+        )
+
+        params = dict(request.model_parameters or {})
+        inputs = {
+            "image_path": image_file_path,
+            "text_prompt": request.text_prompt,
+            "output_format": request.output_format,
+            "seed": params.get("seed"),
+        }
+        for key in (
+            "num_inference_steps",
+            "guidance_scale",
+            "max_size",
+            "width",
+            "height",
+        ):
+            if params.get(key) is not None:
+                inputs[key] = params[key]
+
+        job_request = JobRequest(
+            feature="image_edit",
+            inputs=inputs,
+            model_preference=request.model_preference,
+            priority=1,
+            metadata={
+                "text_prompt": request.text_prompt[:200],
+                "image_path": image_file_path,
+            },
+            user_id=user_id,
+        )
+
+        job_id = await scheduler.schedule_job(job_request)
+        return MeshGenerationResponse(
+            job_id=job_id,
+            status="queued",
+            message="Image-edit job queued (Mage-Flow-Edit-Turbo)",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error scheduling image-edit job: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e

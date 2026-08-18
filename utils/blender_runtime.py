@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union  # Tuple used by blender_version_tuple
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,67 @@ def find_blender_binary() -> Optional[Path]:
             if p.is_file() and os.access(p, os.X_OK):
                 return p.resolve()
     return None
+
+
+def blender_version_tuple(binary: Optional[Path] = None) -> Optional[Tuple[int, int, int]]:
+    """Parse ``blender --version`` → (major, minor, patch)."""
+    bin_path = binary or find_blender_binary()
+    if bin_path is None:
+        return None
+    try:
+        out = subprocess.run(
+            [str(bin_path), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    text = (out.stdout or "") + "\n" + (out.stderr or "")
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.lower().startswith("blender"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        ver = parts[1].split(".")
+        try:
+            major = int(ver[0])
+            minor = int(ver[1]) if len(ver) > 1 else 0
+            patch = int("".join(c for c in (ver[2] if len(ver) > 2 else "0") if c.isdigit()) or "0")
+            return major, minor, patch
+        except ValueError:
+            continue
+    return None
+
+
+def resolve_vrm_addon_zip(repo_root: Optional[Path] = None) -> Path:
+    """
+    Pick a VRM add-on zip compatible with the active Blender.
+
+    - Blender < 4.2: classic ``VRM_Addon_for_Blender-4_0_0.zip`` (has ``bl_info``).
+    - Blender >= 4.2: UniRig ``add-on-vrm-v2.20.77_modified.zip`` (extension package).
+    """
+    root = Path(repo_root) if repo_root else _REPO_ROOT
+    blender_dir = root / "thirdparty" / "UniRig" / "blender"
+    classic = blender_dir / "VRM_Addon_for_Blender-4_0_0.zip"
+    modern = blender_dir / "add-on-vrm-v2.20.77_modified.zip"
+    ver = blender_version_tuple()
+    if ver is not None and ver >= (4, 2, 0):
+        if modern.is_file():
+            return modern
+        if classic.is_file():
+            return classic
+    if classic.is_file():
+        return classic
+    if modern.is_file():
+        return modern
+    raise FileNotFoundError(
+        f"No VRM add-on zip under {blender_dir} "
+        "(need VRM_Addon_for_Blender-4_0_0.zip for Blender 4.0)"
+    )
 
 
 def bpy_importable() -> bool:

@@ -1,16 +1,16 @@
 # State — rewritten in full at session END. Cap: 40 lines.
 
-Session: 15
-Focus: Office Train2 8672869c repaired; gravity lock already on origin
-Active: all Office worlds floor_ransac; no camera_extrinsics left
-Next: Phase B 7–10k on best world for sharpness; denser rescan optional
-Blocked: none for pose
+Session: 23
+Focus: Moat — memory-bank fully local
+Active: shipped — git rm --cached memory-bank/; .gitignore memory-bank/; files remain on disk for agents
+Next: include untrack + gitignore in next API commit when user asks
+Blocked: none
 
 ## Watch-outs
-- Newest-named job ≠ last-repaired ID (Office Train2=8672869c vs Office 3DGS Train2=1a7b74fd)
-- prefer_floor=True locked in 14c5872; densify OFF; no metric SVD bake
-- data_factor=2 sharper than 4; poses_c2w.npy only; orientationMode none
+- memory-bank/ is moat — scp sync only
+- GNM origin = AlfaOmegaGrafx/GNM
+- Do not drain GPU jobs unless queue empty
 
 ## Recently shipped
-- Repaired 8672869c Office Train2 → matches 65360950 (2026-07-27)
-- prefer_floor default + repair helper + Phase B /train-3dgs (14c5872)
+- memory-bank/ fully gitignored
+- Prior: GNM fork remote; MESH_WRAP root moat

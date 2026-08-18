@@ -71,7 +71,16 @@ def resolve_metric_calibration(calibration: Optional[Dict[str, Any]]) -> Optiona
         return None
 
     mode = str(calibration.get("mode") or "reference_length").strip().lower()
-    axis = str(calibration.get("axis") or "uniform").strip().lower()
+    raw_axis = calibration.get("axis")
+    if raw_axis is None or (isinstance(raw_axis, str) and not raw_axis.strip()):
+        # Protected Office door lock: reference_length / two_points default to
+        # horizontal so door-width fixes never stretch height (Y).
+        if mode in ("reference_length", "two_points", "points", "segment"):
+            axis = "horizontal"
+        else:
+            axis = "uniform"
+    else:
+        axis = str(raw_axis).strip().lower()
     if axis in ("xz", "horizontal_only", "floor_plan"):
         axis = "horizontal"
     if axis not in ("uniform", "horizontal"):

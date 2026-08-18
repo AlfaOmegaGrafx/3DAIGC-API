@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional, Union
 
+import numpy as np
 import trimesh
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,20 @@ def decimate_mesh(
     before_faces = len(mesh.faces)
     before_verts = len(mesh.vertices)
 
+    # Quadric simplify drops ColorVisuals → trimesh DEFAULT grey [102,102,102,255].
+    src_colors = None
+    src_vertices = None
+    try:
+        if (
+            hasattr(mesh.visual, "vertex_colors")
+            and mesh.visual.vertex_colors is not None
+            and len(mesh.visual.vertex_colors) == len(mesh.vertices)
+        ):
+            src_colors = np.asarray(mesh.visual.vertex_colors).copy()
+            src_vertices = np.asarray(mesh.vertices, dtype=np.float64).copy()
+    except Exception:
+        src_colors = None
+
     if face_target >= before_faces:
         logger.info(
             "Decimate skipped (already ≤ target): %s faces, target %s",
@@ -91,6 +106,12 @@ def decimate_mesh(
             face_target,
         )
         simplified = mesh.simplify_quadric_decimation(face_count=face_target)
+        if src_colors is not None and src_vertices is not None and len(simplified.vertices):
+            # Nearest-neighbor transfer (quadric does not interpolate attributes)
+            from scipy.spatial import cKDTree
+
+            _, nn = cKDTree(src_vertices).query(np.asarray(simplified.vertices), k=1)
+            simplified.visual.vertex_colors = src_colors[nn]
 
     info = {
         "backend": "trimesh_quadric",
@@ -100,6 +121,7 @@ def decimate_mesh(
         "after_faces": len(simplified.faces),
         "after_vertices": len(simplified.vertices),
         "skipped": face_target >= before_faces,
+        "vertex_colors_preserved": bool(src_colors is not None),
     }
     return simplified, info
 

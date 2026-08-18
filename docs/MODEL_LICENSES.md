@@ -43,6 +43,8 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | `kimodo_text_to_motion` | `Kimodo-SOMA-RP-v1.1` (+ `nv-tlabs/kimodo` code) | NVIDIA Open Model + Apache-2.0 | **CONDITIONAL** | **Ship SOMA-RP only.** Do not enable SMPL-X/G1 variants (see Kimodo section). |
 | `krea2_turbo_text_to_image` | `krea/Krea-2-Turbo` (+ `Qwen/Qwen3-VL-4B-Instruct` text encoder) | [Krea 2 Community License](https://www.krea.ai/krea-2-licensing) | **CONDITIONAL** | **Local inference only** (diffusers `Krea2Pipeline`); commercial if revenue &lt; $1M/yr + content filters; Enterprise license above threshold |
 | `krea2_raw_text_to_image` | `krea/Krea-2-Raw` | Krea 2 Community License | **CONDITIONAL** | Same as Turbo; **disabled by default** — undistilled base for LoRA training, not production inference |
+| `mage_flow_edit_turbo` | `mage-flow-community/Mage-Flow-Edit-Turbo` (mirror) + `microsoft/Mage` code | MIT | **OK** | Official `microsoft/Mage-Flow-Edit-Turbo` HF host withdrawn (2026-07); use pinned community mirror. Isolated `.venv-mage-flow`. See Mage-Flow-Edit section. |
+| `env_mesh_bake` | gsplat + scikit-image + trimesh (no research GS mesh extractors) | Apache-2.0 / BSD / MIT | **OK** | Multi-view TSDF → OMB `environment_mesh.glb`. Requires `gs_dataset/` cameras (env-scan). Not TripoSplat I2W. |
 
 ---
 
@@ -130,6 +132,16 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 
 **Product choice:** Ship **`krea2_turbo_text_to_image`** for best quality/speed (8 steps, up to 2K). Do **not** use Krea hosted API for production unless you want a separate SaaS dependency and billing.
 
+### Mage-Flow-Edit (`mage_flow_edit_turbo`)
+
+| Asset | Source | License | Commercial | Action |
+|-------|--------|---------|--------------|--------|
+| **Inference code** | [microsoft/Mage](https://github.com/microsoft/Mage) (`mage_flow/`) | MIT | **OK** | Isolated `.venv-mage-flow` — do not install into main API venv. |
+| **Edit-Turbo weights** | [mage-flow-community/Mage-Flow-Edit-Turbo](https://huggingface.co/mage-flow-community/Mage-Flow-Edit-Turbo) @ `66df6fa1…` | MIT (card) | **OK** | Official `microsoft/Mage-Flow-Edit-Turbo` HF host withdrawn (see Mage#26). Pin revision; re-verify if switching mirrors. |
+| Text encoder | Bundled Qwen3-VL in checkpoint | Qwen / Apache-2.0 (typical) | **OK** | Loaded via Mage pipeline. |
+
+**Product choice:** Optional Studio stage between Krea and TRELLIS (`krea_mage_trellis2`). Unload = subprocess exit.
+
 ---
 
 ## OK for commercial use (typical OpenNexus3DStudio deployment)
@@ -138,13 +150,24 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 |-----------|---------|
 | TRELLIS / TRELLIS-text (`microsoft/*`) | MIT |
 | TRELLIS.2 core (`microsoft/TRELLIS.2-4B`) | MIT |
+| Mage-Flow-Edit (`mage-flow-community` mirror + `microsoft/Mage` code) | MIT |
 | VoxHammer (code) | MIT |
 | UniRig (`VAST-AI/UniRig`) | MIT |
 | BiRefNet rembg (`ZhengPeng7/BiRefNet`) | MIT |
 | TripoSplat (`VAST-AI/TripoSplat`) | MIT |
 | DINOv2 (`facebook/dinov2-giant`) | Apache-2.0 |
+| Env mesh bake (`env_mesh_bake`) | gsplat Apache-2.0 + scikit-image BSD + trimesh MIT (Open3D unused on aarch64) |
 
 ---
+
+## BLOCKED — do not use commercially (splat→mesh research)
+
+| Component | Why |
+|-----------|-----|
+| MeshSplats / SuGaR / Inria gaussian-splatting / 2DGS | Research / non-commercial GS license chain |
+| QuerySplat + VGGT-Omega | VGGT-Omega FAIR Noncommercial Research |
+
+Use **`env_mesh_bake`** (commercial stack above) for OMB environment GLBs from multi-view worlds.
 
 ## Enforcement in this repo
 
@@ -233,3 +256,10 @@ Use this when shipping OpenNexus3DStudio. **Integration effort** is approximate 
 ---
 
 *Last audited: 2026-05-29. Not legal advice — have counsel review before commercial launch.*
+
+## Arc2Avatar / Arc2Face / FLAME
+
+- Upstream: https://github.com/dimgerogiannis/Arc2Avatar (MIT code)
+- Arc2Face weights (Hugging Face FoivosPar/Arc2Face) — review HF model card
+- FLAME topology / assets — Max Planck FLAME license (non-commercial restrictions may apply)
+- Do not enable public SaaS until legal review recorded here.

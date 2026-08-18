@@ -26,6 +26,19 @@ logger = logging.getLogger(__name__)
 _SH_C0 = 0.28209479177387814
 
 
+def _as_scale_xyz_tuple(scale: Any) -> Tuple[float, float, float]:
+    if isinstance(scale, (list, tuple)) and len(scale) >= 3:
+        return float(scale[0]), float(scale[1]), float(scale[2])
+    if isinstance(scale, dict):
+        return (
+            float(scale.get("x", scale.get("sx", 1.0))),
+            float(scale.get("y", scale.get("sy", 1.0))),
+            float(scale.get("z", scale.get("sz", 1.0))),
+        )
+    v = float(scale) if scale is not None else 1.0
+    return v, v, v
+
+
 def rgb_to_sh_dc(rgb_u8: np.ndarray) -> np.ndarray:
     """Convert uchar RGB [0,255] → f_dc_0..2 (spherical-harmonics DC)."""
     rgb = np.asarray(rgb_u8, dtype=np.float64).reshape(-1, 3) / 255.0
@@ -37,19 +50,62 @@ def inverse_sigmoid(x: float) -> float:
     return math.log(x / (1.0 - x))
 
 
+def estimate_point_adaptive_scales(
+    verts: np.ndarray,
+    *,
+    k: int = 4,
+    scale_mult: float = 0.5,
+    min_scale: float = 0.0008,
+    max_scale: float = 0.004,
+) -> np.ndarray:
+    """
+    Per-point isotropic stddev from local spacing.
+
+    Fixed ``0.012`` (~1.2 cm) was ~4–8× median nearest-neighbor distance on
+    Office scans, so Spark looked soft vs the source photo. Adaptive scales
+    keep coverage without melting edges.
+    """
+    from scipy.spatial import cKDTree
+
+    xyz = np.asarray(verts, dtype=np.float64).reshape(-1, 3)
+    n = int(xyz.shape[0])
+    if n < 2:
+        return np.full((n,), float(min_scale), dtype=np.float32)
+    k_eff = int(max(1, min(k, n - 1)))
+    tree = cKDTree(xyz)
+    # Query in chunks to bound peak RAM on large clouds.
+    nn_mean = np.empty(n, dtype=np.float64)
+    chunk = 250_000
+    for i0 in range(0, n, chunk):
+        i1 = min(i0 + chunk, n)
+        dists, _ = tree.query(xyz[i0:i1], k=k_eff + 1, workers=-1)
+        if k_eff == 1:
+            nn_mean[i0:i1] = dists[:, 1]
+        else:
+            nn_mean[i0:i1] = dists[:, 1:].mean(axis=1)
+    scales = np.clip(nn_mean * float(scale_mult), float(min_scale), float(max_scale))
+    return scales.astype(np.float32)
+
+
 def point_cloud_to_gaussian_ply(
     verts: np.ndarray,
     colors: np.ndarray,
     output_ply: Path,
     *,
-    scale: float = 0.012,
-    opacity: float = 0.9,
+    scale: float | None = None,
+    opacity: float = 0.92,
     max_points: int = 750_000,
+    scale_mult: float = 0.5,
+    min_scale: float = 0.0008,
+    max_scale: float = 0.004,
 ) -> int:
     """
     Pack XYZRGB points as Spark-compatible isotropic Gaussians (no training).
 
     Properties match TripoSplat / WorldMirror exports consumed by Spark.js.
+
+    ``scale=None`` (default) → per-point adaptive stddev from kNN spacing.
+    Pass a float to force a fixed isotropic scale (legacy / tests).
     """
     verts = np.asarray(verts, dtype=np.float32).reshape(-1, 3)
     colors = np.asarray(colors, dtype=np.uint8).reshape(-1, 3)
@@ -64,9 +120,18 @@ def point_cloud_to_gaussian_ply(
 
     f_dc = rgb_to_sh_dc(colors)
     opac = np.full((n,), inverse_sigmoid(opacity), dtype=np.float32)
+    if scale is None:
+        lin_scales = estimate_point_adaptive_scales(
+            verts,
+            scale_mult=scale_mult,
+            min_scale=min_scale,
+            max_scale=max_scale,
+        )
+    else:
+        lin_scales = np.full((n,), float(max(scale, 1e-6)), dtype=np.float32)
     # log-scale (gsplat / Inria store log of stddev)
-    log_s = float(math.log(max(scale, 1e-6)))
-    scales = np.full((n, 3), log_s, dtype=np.float32)
+    log_s = np.log(np.maximum(lin_scales, 1e-6)).astype(np.float32)
+    scales = np.stack([log_s, log_s, log_s], axis=1)
     # Identity quaternion w,x,y,z
     rots = np.zeros((n, 4), dtype=np.float32)
     rots[:, 0] = 1.0
@@ -389,20 +454,43 @@ def refine_point_cloud_world_to_gaussian(
     if not backup.exists():
         shutil.copy2(env_ply, backup)
 
-    n = point_cloud_to_gaussian_ply(verts, colors, env_ply)
     man_path = world_dir / "world.manifest.json"
     manifest = json.loads(man_path.read_text(encoding="utf-8")) if man_path.is_file() else {}
     env = dict(manifest.get("environment") or {})
+    transform = dict(env.get("transform") or {})
+    sx, sy, sz = _as_scale_xyz_tuple(transform.get("scale", 1.0))
+    metric_baked = False
+    # Non-uniform Three.js scale smears Spark covariances (soft blob). Bake the
+    # door metric into Gaussian centers and leave identity scale for the viewport.
+    if abs(sx - 1.0) > 1e-4 or abs(sy - 1.0) > 1e-4 or abs(sz - 1.0) > 1e-4:
+        verts = np.asarray(verts, dtype=np.float64).copy()
+        verts[:, 0] *= sx
+        verts[:, 1] *= sy
+        verts[:, 2] *= sz
+        verts = verts.astype(np.float32)
+        transform["scale"] = [1.0, 1.0, 1.0]
+        metric_baked = True
+
+    n = point_cloud_to_gaussian_ply(verts, colors, env_ply)
     env["type"] = "gaussian_splat"
     env["format"] = "ply"
     env["renderer"] = "spark"
     env["url"] = "environment.ply"
+    env["transform"] = transform
     manifest["environment"] = env
     meta = dict(manifest.get("metadata") or {})
     meta["source_geometry"] = "gaussian_from_point_cloud"
     meta["gaussian_phase"] = "A_isotropic_from_points"
+    meta["gaussian_scale_mode"] = "adaptive_knn"
     meta["gaussian_count"] = n
     meta["point_cloud_backup"] = "environment.points.ply"
+    if metric_baked:
+        meta["metric_baked_into_assets"] = True
+        cal = dict(meta.get("metric_calibration") or {})
+        cal["baked_into_assets"] = True
+        cal["scale_xyz"] = [sx, sy, sz]
+        cal["manifest_transform_scale"] = [1.0, 1.0, 1.0]
+        meta["metric_calibration"] = cal
     manifest["metadata"] = meta
     man_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 

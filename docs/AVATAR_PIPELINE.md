@@ -55,11 +55,13 @@ See [API avatar rig contract](API_AVATAR_RIG_CONTRACT.md) for export validation 
 | Approach | Blend shapes on avatar? | Status |
 |----------|-------------------------|--------|
 | Template rig (bones-only) | No — skeleton only on AIGC mesh | **Implemented** |
-| Mesh wrap (CC Wrap / MeshMonk analog) | Yes — after non-rigid transfer | **Roadmap** (`apply_humanoid_template_wrap.py` stub) |
+| Head stitch (`rig_mode: template_wrap`) | Yes — keep `template.vrm` head morphs + AIGC body | **Phase 5 MVP** ([MESH_WRAP_ROADMAP.md](MESH_WRAP_ROADMAP.md)) |
+| MeshMonk dense wrap | Yes — AIGC face likeness onto morph topo | **Deferred** (Phase 4, after stitch) |
+| Shrinkwrap shape-key transfer | Uncertain on AIGC topo | **Optional R&D** (Phase 3 demoted) |
+| Creature / SkinTokens face | Bone retarget (`jaw`/`chin`/`eye`) | **Client** `creatureFaceRetarget.js` — not MeshMonk |
 | [Arc2Avatar](https://github.com/dimgerogiannis/Arc2Avatar) | Yes — on **3D Gaussian head** (FLAME), not VRM body | **Stub** (`adapters/arc2avatar_adapter.py`, `docs/ARC2AVATAR_TRACK.md`) |
-| Head/body stitch (P3-SAM) | Yes — keep template head mesh | **Planned** |
 
-Project direction: **avatars must support blend shapes** for XR face tracking. Short term: template metadata in VRM export + wrap R&D. Optional: Arc2Avatar splat head + rigged body composite.
+Project direction: **avatars must support blend shapes** for XR face tracking. Ship Phase 5 head stitch first; MeshMonk likeness later. Creatures never use wrap.
 
 ## VRM export from rigged GLB
 

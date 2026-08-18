@@ -72,7 +72,7 @@ class ModelCache:
         self.device = device
 
     def get_loaded_system(
-        self, task_config_path: str, compile_model: bool = True
+        self, task_config_path: str, compile_model: bool = False
     ) -> LoadedSystem:
         """Get a fully loaded system with checkpoint, configs, and everything ready"""
         if task_config_path not in self._loaded_systems:
@@ -661,7 +661,7 @@ class UniRigInferenceEngine:
 
 # Convenience functions for quick usage
 def create_inference_engine(
-    device: str = "auto", compile_models: bool = True, cache_dir: str = "tmp"
+    device: str = "auto", compile_models: bool = False, cache_dir: str = "tmp"
 ) -> UniRigInferenceEngine:
     """Create a pre-configured inference engine"""
     if device == "auto":

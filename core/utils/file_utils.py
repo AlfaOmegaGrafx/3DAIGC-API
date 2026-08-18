@@ -115,6 +115,62 @@ def validate_image_file(
         return {"valid": False, "error": str(e)}
 
 
+def downscale_image_inplace(
+    file_path: str, max_resolution: Tuple[int, int] = MAX_IMAGE_RESOLUTION
+) -> Dict:
+    """
+    If an image exceeds max_resolution, resize in place (LANCZOS) and overwrite.
+
+    Phone selfies often exceed 2048×2048; rejecting the upload drops MeshMonk likeness.
+    """
+    try:
+        with Image.open(file_path) as img:
+            width, height = img.size
+            mw, mh = max_resolution
+            if width <= mw and height <= mh:
+                return {
+                    "resized": False,
+                    "width": width,
+                    "height": height,
+                    "format": img.format,
+                }
+            scale = min(mw / float(width), mh / float(height))
+            nw = max(1, int(round(width * scale)))
+            nh = max(1, int(round(height * scale)))
+            fmt = (img.format or "JPEG").upper()
+            if fmt == "JPG":
+                fmt = "JPEG"
+            out = img.resize((nw, nh), Image.Resampling.LANCZOS)
+            save_kwargs: Dict = {}
+            if fmt == "JPEG":
+                if out.mode in ("RGBA", "P", "LA"):
+                    out = out.convert("RGB")
+                save_kwargs["quality"] = 92
+                save_kwargs["optimize"] = True
+            elif fmt == "PNG" and out.mode == "P":
+                out = out.convert("RGBA")
+            out.save(file_path, format=fmt, **save_kwargs)
+            logger.info(
+                "Downscaled upload image %sx%s → %sx%s (%s)",
+                width,
+                height,
+                nw,
+                nh,
+                file_path,
+            )
+            return {
+                "resized": True,
+                "width": nw,
+                "height": nh,
+                "original_width": width,
+                "original_height": height,
+                "format": fmt,
+            }
+    except Exception as e:
+        logger.warning("downscale_image_inplace failed for %s: %s", file_path, e)
+        return {"resized": False, "error": str(e)}
+
+
 def validate_mesh_file(
     file_path: str,
     max_vertices: int = MAX_MESH_VERTICES,
@@ -247,7 +303,15 @@ async def save_upload_file(
         if validate_content and upload_file.filename:
             file_type = get_file_type_from_extension(upload_file.filename)
             if file_type == "image":
+                downscale_info = downscale_image_inplace(str(file_path))
                 validation_info = validate_image_file(str(file_path))
+                if downscale_info.get("resized"):
+                    validation_info = {
+                        **validation_info,
+                        "downscaled": True,
+                        "original_width": downscale_info.get("original_width"),
+                        "original_height": downscale_info.get("original_height"),
+                    }
                 if not validation_info.get("valid", False):
                     os.remove(file_path)
                     raise FileUploadError(
@@ -341,7 +405,15 @@ async def save_base64_file(
         if validate_content:
             file_type = get_file_type_from_extension(final_filename)
             if file_type == "image":
+                downscale_info = downscale_image_inplace(str(file_path))
                 validation_info = validate_image_file(str(file_path))
+                if downscale_info.get("resized"):
+                    validation_info = {
+                        **validation_info,
+                        "downscaled": True,
+                        "original_width": downscale_info.get("original_width"),
+                        "original_height": downscale_info.get("original_height"),
+                    }
                 if not validation_info.get("valid", False):
                     os.remove(file_path)
                     raise FileUploadError(
@@ -401,7 +473,15 @@ async def process_mixed_input(
 
         validation_info = {}
         if file_type == "image":
+            downscale_info = downscale_image_inplace(file_path)
             validation_info = validate_image_file(file_path)
+            if downscale_info.get("resized"):
+                validation_info = {
+                    **validation_info,
+                    "downscaled": True,
+                    "original_width": downscale_info.get("original_width"),
+                    "original_height": downscale_info.get("original_height"),
+                }
             if not validation_info.get("valid", False):
                 raise FileUploadError(
                     file_path, validation_info.get("error", "Invalid image file")

@@ -5,10 +5,11 @@ Provides endpoints for automatically adding bone structures to 3D meshes.
 """
 
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.dependencies import get_current_user_or_none, get_file_store, get_scheduler
 from api.object_name import ObjectNamed, enrich_job_inputs, enrich_job_metadata
@@ -67,10 +68,22 @@ class AutoRigRequest(ObjectNamed):
     mesh_file_id: Optional[str] = Field(
         None, description="File ID from upload endpoint"
     )
+    mesh_job_id: Optional[str] = Field(
+        None,
+        description="Completed mesh job whose output should be rigged (no re-upload)",
+    )
     rig_mode: str = Field("skeleton", description="Rig mode for auto-rigging")
     humanoid_template_id: Optional[str] = Field(
         None,
         description="Humanoid VRM template id when rig_mode is 'template' (default: template)",
+    )
+    creature_template_id: Optional[str] = Field(
+        None,
+        description="Creature template id when rig_mode is 'creature_template' (default: fox)",
+    )
+    appearance_slot: Optional[str] = Field(
+        None,
+        description="Appearance Editor slot when rig_mode is 'appearance_component'",
     )
     output_format: str = Field("fbx", description="Output format for rigged mesh")
     model_preference: str = Field(
@@ -80,29 +93,111 @@ class AutoRigRequest(ObjectNamed):
         None, 
         description="Model-specific parameters (query /system/models/{model_id}/parameters for schema)"
     )
+    likeness_image_file_id: Optional[str] = Field(
+        None,
+        description=(
+            "Optional selfie / face photo file id for template_wrap face_likeness "
+            "(MediaPipe mesh when likeness_source is selfie or auto)"
+        ),
+    )
 
     @field_validator("output_format")
     @classmethod
     def validate_output_format(cls, v):
-        allowed_formats = ["fbx", "glb"]
+        allowed_formats = ["fbx", "glb", "vrm"]
         if v not in allowed_formats:
             raise ValueError(f"Output format must be one of: {allowed_formats}")
         return v
 
-    @field_validator("mesh_file_id")
-    @classmethod
-    def validate_inputs(cls, v, info):
-        mesh_path = info.data.get("mesh_path")
-
-        inputs_provided = sum(bool(x) for x in [mesh_path, v])
-
-        if inputs_provided == 0:
-            raise ValueError("One of mesh_path or mesh_file_id must be provided")
-        if inputs_provided > 1:
-            raise ValueError("Only one of mesh_path or mesh_file_id should be provided")
-        return v
+    @model_validator(mode="after")
+    def validate_mesh_source(self):
+        provided = sum(
+            bool(x) for x in [self.mesh_path, self.mesh_file_id, self.mesh_job_id]
+        )
+        if provided == 0:
+            raise ValueError(
+                "One of mesh_path, mesh_file_id, or mesh_job_id must be provided"
+            )
+        if provided > 1:
+            raise ValueError(
+                "Only one of mesh_path, mesh_file_id, or mesh_job_id should be provided"
+            )
+        return self
 
     model_config = ConfigDict(protected_namespaces=("settings_",))
+
+
+def reject_non_humanoid_template_wrap(
+    rig_mode: str, model_preference: Optional[str]
+) -> Optional[str]:
+    """
+    MeshMonk / template_wrap / Phase 5 head stitch is humanoid UniRig only.
+
+    Returns an error detail string when the combination is invalid, else None.
+    Creatures use SkinTokens / creature_template + client creatureFaceRetarget.
+    """
+    if str(rig_mode or "").lower() != "template_wrap":
+        return None
+    pref = (model_preference or "").strip()
+    if pref == "creature_template_auto_rig":
+        return (
+            "template_wrap is humanoid-only (UniRig + template.vrm head stitch). "
+            "Use rig_mode=creature_template for Mesh2Motion creatures, "
+            "or SkinTokens for non-humanoid AIGC; face motion uses "
+            "client creatureFaceRetarget, not MeshMonk."
+        )
+    if pref and pref != "unirig_auto_rig":
+        if pref == "skintokens_auto_rig":
+            return (
+                "template_wrap cannot use SkinTokens. "
+                "Use unirig_auto_rig for humanoid head stitch / wrap, "
+                "or drop wrap for SkinTokens."
+            )
+    return None
+
+
+_MESH_RESULT_KEYS = (
+    "output_mesh_path",
+    "output_mesh_path_glb",
+    "rigged_mesh_path",
+    "mesh_path",
+    "output_path",
+    "file_path",
+)
+
+
+def _looks_like_mesh_file(path: str) -> bool:
+    lower = path.lower()
+    return lower.endswith((".glb", ".gltf", ".fbx", ".obj", ".vrm"))
+
+
+async def resolve_mesh_path_from_job(scheduler, job_id: str) -> str:
+    """Resolve a completed job's on-disk mesh so generate-rig can skip re-upload."""
+    job = await scheduler.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Source mesh job not found")
+    status = str(job.get("status") or "").lower()
+    if status not in {"completed", "success", "done", "succeeded"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Source mesh job is not completed (status={status})",
+        )
+    result = job.get("result") or {}
+    candidates = []
+    for key in _MESH_RESULT_KEYS:
+        value = result.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    for path in candidates:
+        if os.path.isfile(path) and _looks_like_mesh_file(path):
+            return path
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    raise HTTPException(
+        status_code=404,
+        detail="Source mesh job has no readable output mesh on disk",
+    )
 
 
 # Response models
@@ -134,11 +229,30 @@ async def generate_rig(
     """
     user_id = current_user.user_id if current_user else None
     
-    if request.rig_mode.lower() not in ["skeleton", "skin", "full", "template"]:
+    allowed_modes = [
+        "skeleton",
+        "skin",
+        "full",
+        "template",
+        "template_wrap",
+        "appearance_component",
+        "creature_template",
+    ]
+    rig_mode_normalized = request.rig_mode.lower()
+    if rig_mode_normalized not in allowed_modes:
         raise HTTPException(
             status_code=400,
-            detail="Invalid rig mode. Allowed: skeleton, skin, full, template",
+            detail=(
+                "Invalid rig mode. Allowed: skeleton, skin, full, template, "
+                "template_wrap, appearance_component, creature_template"
+            ),
         )
+
+    wrap_reject = reject_non_humanoid_template_wrap(
+        rig_mode_normalized, request.model_preference
+    )
+    if wrap_reject:
+        raise HTTPException(status_code=400, detail=wrap_reject)
 
     try:
         # Validate model preference
@@ -154,6 +268,10 @@ async def generate_rig(
                 raise HTTPException(
                     status_code=404, detail="Mesh file not found or expired"
                 )
+        elif request.mesh_job_id:
+            mesh_file_path = await resolve_mesh_path_from_job(
+                scheduler, request.mesh_job_id
+            )
         else:
             mesh_file_path = request.mesh_path
 
@@ -163,23 +281,57 @@ async def generate_rig(
                 status_code=400, detail="Mesh path or file ID must be provided"
             )
 
+        likeness_image_path = None
+        mp = dict(request.model_parameters or {})
+        # Do not let model_parameters clobber the resolved selfie path.
+        mp.pop("likeness_image_path", None)
+        likeness_file_id = (
+            request.likeness_image_file_id
+            or mp.pop("likeness_image_file_id", None)
+        )
+        if likeness_file_id:
+            likeness_image_path = await resolve_file_id_async(
+                str(likeness_file_id), file_store
+            )
+            if not likeness_image_path:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Likeness selfie file not found or expired",
+                )
+
         # Validate rig type
+        job_inputs = enrich_job_inputs(
+            {
+                "rig_mode": rig_mode_normalized,
+                "mesh_path": mesh_file_path,
+                "output_format": request.output_format,
+                **(
+                    {"humanoid_template_id": request.humanoid_template_id}
+                    if request.humanoid_template_id
+                    else {}
+                ),
+                **(
+                    {"creature_template_id": request.creature_template_id}
+                    if request.creature_template_id
+                    else {}
+                ),
+                **(
+                    {"appearance_slot": request.appearance_slot}
+                    if request.appearance_slot
+                    else {}
+                ),
+                **mp,
+                **(
+                    {"likeness_image_path": likeness_image_path}
+                    if likeness_image_path
+                    else {}
+                ),
+            },
+            request.object_name,
+        )
         job_request = JobRequest(
             feature="auto_rig",
-            inputs=enrich_job_inputs(
-                {
-                    "rig_mode": request.rig_mode.lower(),
-                    "mesh_path": mesh_file_path,
-                    "output_format": request.output_format,
-                    **(
-                        {"humanoid_template_id": request.humanoid_template_id}
-                        if request.humanoid_template_id
-                        else {}
-                    ),
-                    **(request.model_parameters or {}),
-                },
-                request.object_name,
-            ),
+            inputs=job_inputs,
             model_preference=request.model_preference,
             priority=1,
             metadata=enrich_job_metadata("auto_rig", request.object_name),
@@ -228,9 +380,14 @@ async def get_humanoid_template_manifest(template_id: str):
             "description",
             "Master humanoid VRM (template.vrm) with facial blend shapes",
         ),
-        "blend_shapes_on_generated_mesh": False,
-        "wrap_status": "bones_only",
+        "blend_shapes_on_generated_mesh": True,
+        "wrap_status": "head_stitch",
+        "wrap_humanoid_only": True,
         "documentation": "/docs/AVATAR_PIPELINE.md",
+        "note": (
+            "template_wrap Phase 5 keeps template.vrm head morphs + AIGC body. "
+            "MeshMonk likeness (Phase 4) is deferred. Creatures use creatureFaceRetarget."
+        ),
     }
 
 
@@ -242,4 +399,4 @@ async def get_supported_formats():
     Returns:
         Dictionary of supported formats
     """
-    return {"input_formats": ["obj", "glb", "fbx"], "output_formats": ["fbx", "glb"]}
+    return {"input_formats": ["obj", "glb", "fbx", "vrm"], "output_formats": ["fbx", "glb", "vrm"]}

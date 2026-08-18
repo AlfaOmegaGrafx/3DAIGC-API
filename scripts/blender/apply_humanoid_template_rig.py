@@ -31,6 +31,8 @@ with open(job_path, encoding="utf-8") as f:
 template_vrm = job["template_vrm"]
 target_mesh = job["target_mesh"]
 output_glb = job["output_glb"]
+output_vrm = job.get("output_vrm") or os.path.splitext(output_glb)[0] + ".vrm"
+vrm_addon_zip = job.get("vrm_addon_zip") or ""
 
 # Blender world: Z = up, XY = ground plane.
 UP_AXIS = 2
@@ -85,6 +87,56 @@ def _cleanup_extras(keep_objects) -> None:
         if obj in keep:
             continue
         bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def _try_enable_vrm_addon(zip_path: str) -> bool:
+    import sys
+
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    from vrm_addon_utils import try_enable_vrm_addon
+
+    return try_enable_vrm_addon(zip_path)
+
+
+def _assign_vrm_humanoid(armature) -> None:
+    try:
+        ext = armature.data.vrm_addon_extension
+        ext.spec_version = "1.0"
+    except Exception as exc:
+        print(f"VRM extension missing: {exc}")
+        return
+    try:
+        bpy.ops.vrm.assign_vrm1_humanoid_human_bones_automatically(
+            armature_object_name=armature.name
+        )
+    except TypeError:
+        try:
+            bpy.ops.vrm.assign_vrm1_humanoid_human_bones_automatically(
+                armature_name=armature.name
+            )
+        except Exception as exc:
+            print(f"auto humanoid assign failed: {exc}")
+    except Exception as exc:
+        print(f"auto humanoid assign failed: {exc}")
+
+
+def _export_vrm(path: str, armature, mesh) -> bool:
+    if not hasattr(bpy.ops, "export_scene") or not hasattr(bpy.ops.export_scene, "vrm"):
+        print("export_scene.vrm unavailable")
+        return False
+    bpy.ops.object.select_all(action="DESELECT")
+    mesh.select_set(True)
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    try:
+        bpy.ops.export_scene.vrm(filepath=path)
+        return os.path.isfile(path)
+    except Exception as exc:
+        print(f"VRM export failed: {exc}")
+        return False
 
 
 def _export_template_skeleton_fbx(output_fbx: str) -> None:
@@ -214,7 +266,8 @@ def _character_forward_xy(armature):
         return None
     right_vec.normalize()
     up.normalize()
-    forward = right_vec.cross(up)
+    # Blender Z-up, character facing +Y: up × right = +Y (right × up = -Y).
+    forward = up.cross(right_vec)
     if forward.length < 1e-9:
         return None
     forward.normalize()
@@ -232,6 +285,47 @@ def _needs_yaw_flip_for_minus_z(forward_xy) -> bool:
         return False
     # Target forward in Blender is +Y (glTF -Z).
     return forward_xy.y < 0.0
+
+
+def _mesh_forward_xy(mesh):
+    """Horizontal facing hint from mesh face normals (Blender XY)."""
+    import bmesh
+    from mathutils import Vector
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    eval_obj = mesh.evaluated_get(depsgraph)
+    bm = bmesh.new()
+    try:
+        bm.from_object(eval_obj, depsgraph)
+        bm.transform(mesh.matrix_world)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        acc = Vector((0.0, 0.0, 0.0))
+        for face in bm.faces:
+            n = face.normal
+            area = face.calc_area()
+            acc += Vector((n.x, n.y, 0.0)) * area
+        if acc.length < 1e-9:
+            return None
+        acc.normalize()
+        return acc
+    finally:
+        bm.free()
+
+
+def _align_armature_facing_to_mesh(armature, mesh) -> None:
+    """Yaw armature only before parenting so skeleton forward matches mesh."""
+    armature.rotation_mode = "XYZ"
+    arm_fwd = _character_forward_xy(armature)
+    mesh_fwd = _mesh_forward_xy(mesh)
+    if arm_fwd is None or mesh_fwd is None:
+        print("TEMPLATE_RIG_REL_YAW skip")
+        return
+    if arm_fwd.dot(mesh_fwd) >= 0.0:
+        print(f"TEMPLATE_RIG_REL_YAW ok arm_y={arm_fwd.y:.3f} mesh_y={mesh_fwd.y:.3f}")
+        return
+    armature.rotation_euler[UP_AXIS] += math.pi
+    bpy.context.view_layer.update()
+    print(f"TEMPLATE_RIG_REL_YAW flip=pi arm_y={arm_fwd.y:.3f} mesh_y={mesh_fwd.y:.3f}")
 
 
 def _align_armature_to_target(armature, target, job) -> None:
@@ -319,6 +413,9 @@ try:
         if obj.type == "MESH" and obj is not target:
             bpy.data.objects.remove(obj, do_unlink=True)
 
+    # Match skeleton facing to mesh before bind (post-parent yaw cannot fix relative facing).
+    _align_armature_facing_to_mesh(armature, target)
+
     bpy.ops.object.select_all(action="DESELECT")
     target.select_set(True)
     armature.select_set(True)
@@ -346,6 +443,13 @@ try:
         export_skins=True,
         export_animations=False,
     )
+
+    if not _try_enable_vrm_addon(vrm_addon_zip):
+        raise SystemExit("VRM addon unavailable — cannot export template rig as VRM")
+    _assign_vrm_humanoid(armature)
+    if not _export_vrm(output_vrm, armature, target):
+        raise SystemExit(f"template VRM export failed: {output_vrm}")
+    print(f"TEMPLATE_RIG_VRM_OK path={output_vrm}")
 finally:
     try:
         os.unlink(skeleton_fbx)

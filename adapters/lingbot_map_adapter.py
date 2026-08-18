@@ -128,6 +128,9 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
         refine_to_3dgs = bool(inputs.get("refine_to_3dgs") or False)
         train_3dgs = bool(inputs.get("train_3dgs") or False)
         train_3dgs_steps = int(inputs.get("train_3dgs_steps") or 7000)
+        bake_env_mesh = bool(inputs.get("bake_env_mesh") or False)
+        if bake_env_mesh and not (refine_to_3dgs or train_3dgs):
+            refine_to_3dgs = True  # bake needs gs_dataset from Phase A
 
         result = run_environment_scan(
             job_id=job_id,
@@ -142,6 +145,7 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
             refine_to_3dgs=refine_to_3dgs,
             train_3dgs=train_3dgs,
             train_3dgs_steps=train_3dgs_steps,
+            bake_env_mesh=bake_env_mesh,
         )
 
         return {
@@ -151,7 +155,11 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
             "world_manifest_url": result.get("world_manifest_url"),
             "world_base_url": result.get("world_base_url"),
             "output_splat_path": result.get("output_splat_path"),
-            "output_mesh_path": result.get("output_splat_path"),
+            "output_mesh_path": (
+                str(Path(result["world_directory"]) / "environment_mesh.glb")
+                if result.get("env_mesh_bake")
+                else result.get("output_splat_path")
+            ),
             "mesh_url": result.get("output_splat_path"),
             "generation_info": {
                 "pipeline": "lingbot_map_environment_scan",
@@ -162,5 +170,6 @@ class LingBotMapEnvironmentScanAdapter(ImageToMeshModel):
                 ),
                 "gaussian_refine": result.get("gaussian_refine"),
                 "gaussian_train": result.get("gaussian_train"),
+                "env_mesh_bake": result.get("env_mesh_bake"),
             },
         }

@@ -10,6 +10,7 @@ from . import (
     mesh_segmentation,
     mesh_uv_unwrapping,
     splat_generation,
+    arc2avatar,
     system,
     world_generation,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "mesh_segmentation",
     "mesh_uv_unwrapping",
     "splat_generation",
+    "arc2avatar",
     "system",
     "world_generation",
 ]

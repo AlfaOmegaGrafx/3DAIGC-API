@@ -27,6 +27,8 @@ psutil==5.9.6
 
 # 3D processing libraries
 trimesh==4.6.12
+meshmonk[io]==0.3.0
+mediapipe>=0.10.14
 open3d==0.18.0
 numpy==1.24.3
 

@@ -278,6 +278,10 @@ app.include_router(
 )
 
 
+app.include_router(
+    arc2avatar.router, prefix="/api/v1", tags=["Arc2Avatar"]
+)
+
 # Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():

@@ -312,6 +312,7 @@ app.include_router(
 )
 
 from api.routers import splat_generation
+from api.routers import arc2avatar
 from api.routers import world_generation
 from api.routers import spatial_fabric
 from api.routers import image_generation, motion_generation
@@ -321,6 +322,10 @@ app.include_router(
 )
 app.include_router(
     splat_generation.router, prefix="/api/v1", tags=["Splat Generation"]
+)
+
+app.include_router(
+    arc2avatar.router, prefix="/api/v1", tags=["Arc2Avatar"]
 )
 
 app.include_router(

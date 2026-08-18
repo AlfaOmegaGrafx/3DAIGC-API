@@ -9,16 +9,23 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import torch
 
-from utils.unirig_utils import InferenceConfig, UniRigInferenceEngine
 from core.models.base import ModelStatus
 from core.models.rig_models import AutoRigModel
 from core.utils.file_utils import OutputPathGenerator
+from core.utils.appearance_slots import (
+    appearance_base_vrm_path,
+    equip_slot_for_appearance,
+    infer_appearance_slot,
+    normalize_appearance_slot,
+)
 from core.utils.format_utils import (
+    apply_appearance_component_rig,
     apply_humanoid_template_rig,
+    apply_humanoid_template_wrap,
     extract_vrm_skeleton_fbx,
     fbx_to_glb,
     merge_rigged_fbx_with_source_mesh,
@@ -27,7 +34,14 @@ from core.utils.format_utils import (
 from core.utils.humanoid_template import get_template, template_paths_available
 from core.utils.mesh_utils import MeshProcessor
 
+if TYPE_CHECKING:
+    from utils.unirig_utils import UniRigInferenceEngine
+
 logger = logging.getLogger(__name__)
+
+# NOTE: Do NOT import utils.unirig_utils (or UniRig model graph) at module load.
+# That pulls spconv → ninja JIT build (fails on this DGX CUDA / compute_52).
+# template / template_wrap / appearance_component only need Blender; ML engine is lazy.
 
 
 class UniRigAdapter(AutoRigModel):
@@ -57,7 +71,7 @@ class UniRigAdapter(AutoRigModel):
             model_path=model_path,
             vram_requirement=vram_requirement,
             supported_input_formats=["fbx", "obj", "glb", "vrm"],
-            supported_output_formats=["fbx"],
+            supported_output_formats=["fbx", "glb", "vrm"],
         )
 
         self.unirig_root = Path(unirig_root)
@@ -71,36 +85,47 @@ class UniRigAdapter(AutoRigModel):
             raise FileNotFoundError(f"UniRig not found at: {self.unirig_root}")
 
     def _load_model(self):
-        """Load UniRig inference engine."""
-        try:
-            logger.info(f"Loading UniRig model from {self.unirig_root}")
+        """
+        Mark adapter ready without loading UniRig weights.
 
-            # Add UniRig to Python path
+        Template / appearance_component only need Blender. SkinTokens-style
+        UniRig inference is loaded lazily on first skeleton/skin/full request
+        (avoids spconv/ninja failures blocking clothing fits).
+        """
+        logger.info(
+            "UniRig adapter ready (lazy inference engine; Blender paths available)"
+        )
+        return None
+
+    def _ensure_inference_engine(self):
+        """Load UniRig inference engine on demand (spconv/ninja-heavy — not for wrap)."""
+        if self.inference_engine is not None:
+            return self.inference_engine
+        try:
+            # Lazy import: avoids spconv JIT at UniRigAdapter construction / template_wrap.
+            from utils.unirig_utils import InferenceConfig, UniRigInferenceEngine
+
+            logger.info(f"Lazy-loading UniRig model from {self.unirig_root}")
+
             if str(self.unirig_root) not in sys.path:
                 sys.path.insert(0, str(self.unirig_root))
 
-            # Create inference configuration
             config = InferenceConfig(
                 device=self.device,
-                compile_model=True,  # Use torch.compile for faster inference
+                # torch.compile → ninja; broken on this DGX image (exit 2). Eager is fine.
+                compile_model=False,
                 cache_dir=str(
                     self.path_generator.base_output_dir / "temp" / "unirig_cache"
                 ),
                 precision="bf16-mixed",
             )
-
-            # Initialize inference engine
             self.inference_engine = UniRigInferenceEngine(config)
-
-            # Preload models for faster inference
             self.inference_engine.preload_systems()
-
             logger.info("UniRig model loaded successfully")
             return self.inference_engine
-
         except Exception as e:
             logger.error(f"Failed to load UniRig model: {str(e)}")
-            raise Exception(f"Failed to load UniRig model: {str(e)}")
+            raise Exception(f"Failed to load UniRig model: {str(e)}") from e
 
     def _unload_model(self):
         """Unload UniRig model."""
@@ -127,7 +152,7 @@ class UniRigAdapter(AutoRigModel):
             inputs: Dictionary containing:
                 - mesh_path: Path to input mesh (required)
                 - rig_mode: Rigging mode ("skeleton", "skin", "full") (default: "full")
-                - output_format: Output format ("fbx", "glb") (default: "fbx")
+                - output_format: Output format ("fbx", "glb", "vrm") (default: "fbx")
                 - seed: Random seed for generation (default: None)
                 - with_skinning: Whether to apply skinning weights (default: True)
                 - skeleton_config: Path to skeleton task config (default: None)
@@ -137,9 +162,6 @@ class UniRigAdapter(AutoRigModel):
             Dictionary with rigging results
         """
         try:
-            if self.inference_engine is None:
-                raise ValueError("UniRig inference engine is not loaded")
-
             # Validate inputs
             if "mesh_path" not in inputs:
                 raise ValueError("mesh_path is required for auto-rigging")
@@ -148,20 +170,38 @@ class UniRigAdapter(AutoRigModel):
             if not mesh_path.exists():
                 raise FileNotFoundError(f"Input mesh file not found: {mesh_path}")
 
-            # Extract parameters
+            # Extract parameters early so appearance_component can skip UniRig engine.
             rig_mode = inputs.get("rig_mode", "full")
+            if rig_mode not in ("template", "template_wrap", "appearance_component"):
+                self._ensure_inference_engine()
+
             output_format = inputs.get("output_format", "fbx")
             seed = inputs.get("seed", None)
             with_skinning = inputs.get("with_skinning", True)
             skeleton_config = inputs.get("skeleton_config", None)
             skin_config = inputs.get("skin_config", None)
             humanoid_template_id = inputs.get("humanoid_template_id")
+            appearance_slot = normalize_appearance_slot(
+                inputs.get("appearance_slot")
+            ) or infer_appearance_slot(
+                object_name=inputs.get("object_name"),
+                mesh_file_name=mesh_path.name,
+            )
 
             # Validate rig mode
-            if rig_mode not in ["skeleton", "skin", "full", "template"]:
+            allowed_modes = [
+                "skeleton",
+                "skin",
+                "full",
+                "template",
+                "template_wrap",
+                "appearance_component",
+            ]
+            if rig_mode not in allowed_modes:
                 raise ValueError(
                     f"Invalid rig_mode: {rig_mode}. "
-                    "Must be 'skeleton', 'skin', 'full', or 'template'"
+                    "Must be 'skeleton', 'skin', 'full', 'template', 'template_wrap', "
+                    "or 'appearance_component' (clothing → Appearance Editor VRM fit)"
                 )
 
             logger.info(f"Auto-rigging mesh with UniRig: {mesh_path}, mode: {rig_mode}")
@@ -188,21 +228,99 @@ class UniRigAdapter(AutoRigModel):
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            if rig_mode == "template":
+            wrap_requested = rig_mode == "template_wrap"
+            appearance_requested = rig_mode == "appearance_component"
+            rig_validation = None
+            if appearance_requested:
+                slot = appearance_slot or "Legs"
+                base_vrm = appearance_base_vrm_path(
+                    Path(__file__).resolve().parent.parent
+                )
+                if not base_vrm.is_file():
+                    raise FileNotFoundError(
+                        f"Appearance base VRM missing: {base_vrm}"
+                    )
+                glb_output = (
+                    output_path if output_format == "glb" else output_path.with_suffix(".glb")
+                )
+                vrm_output = glb_output.with_suffix(".vrm")
+                result_path, rig_validation = apply_appearance_component_rig(
+                    str(base_vrm),
+                    str(mesh_path),
+                    str(glb_output),
+                    appearance_slot=slot,
+                    output_vrm_path=str(vrm_output),
+                )
+                # Prefer VRM as primary artifact so Appearance loadCustomTrait works.
+                if Path(vrm_output).is_file():
+                    result_path = str(vrm_output)
+                has_skinning = True
+                appearance_slot = slot
+            elif rig_mode in ("template", "template_wrap"):
                 template_id = humanoid_template_id or "template"
                 spec = get_template(template_id)
                 if not spec.vrm_path.is_file():
                     raise FileNotFoundError(f"Humanoid template VRM missing: {spec.vrm_path}")
                 glb_output = (
-                    output_path if output_format == "glb" else output_path.with_suffix(".glb")
+                    output_path
+                    if output_format == "glb"
+                    else output_path.with_suffix(".glb")
                 )
-                result_path, rig_validation = apply_humanoid_template_rig(
+                vrm_output = (
+                    output_path
+                    if output_format == "vrm"
+                    else glb_output.with_suffix(".vrm")
+                )
+                apply_fn = (
+                    apply_humanoid_template_wrap
+                    if wrap_requested
+                    else apply_humanoid_template_rig
+                )
+                wrap_kwargs = {"output_vrm_path": str(vrm_output)}
+                if wrap_requested:
+                    mp = inputs  # model_parameters already merged into inputs
+                    wrap_kwargs.update(
+                        {
+                            "gnm_identity": bool(mp.get("gnm_identity")),
+                            "character_gender": mp.get("character_gender"),
+                            "character_ethnicity": mp.get("character_ethnicity"),
+                            "gnm_seed": mp.get("gnm_seed"),
+                            "gnm_bake_expressions": bool(
+                                mp.get("gnm_bake_expressions", mp.get("gnm_identity"))
+                            ),
+                            "gnm_replace_morphs": bool(mp.get("gnm_replace_morphs")),
+                            "face_likeness": bool(mp.get("face_likeness")),
+                            "likeness_alpha": float(mp.get("likeness_alpha", 0.65) or 0.65),
+                            "likeness_source": mp.get("likeness_source") or "auto",
+                            "likeness_image_path": mp.get("likeness_image_path")
+                            or inputs.get("likeness_image_path"),
+                        }
+                    )
+                    # Explicit Body+Cloth neck-open vs full-body mannequin (auto-detect if omitted).
+                    if "expect_headless_body" in mp and mp.get("expect_headless_body") is not None:
+                        wrap_kwargs["expect_headless_body"] = bool(mp.get("expect_headless_body"))
+                    # Auto-enable GNM when ethnicity is provided from Studio.
+                    if mp.get("character_ethnicity"):
+                        wrap_kwargs["gnm_identity"] = True
+                        wrap_kwargs["gnm_bake_expressions"] = bool(
+                            mp.get("gnm_bake_expressions", True)
+                        )
+                result_path, rig_validation = apply_fn(
                     str(spec.vrm_path),
                     str(mesh_path),
                     str(glb_output),
+                    **wrap_kwargs,
                 )
+                # Prefer VRM as primary download for Body+Cloth / template paths.
+                if Path(vrm_output).is_file():
+                    result_path = str(vrm_output)
+                elif (rig_validation or {}).get("output_vrm") and Path(
+                    str(rig_validation["output_vrm"])
+                ).is_file():
+                    result_path = str(rig_validation["output_vrm"])
                 has_skinning = True
-                rig_fbx_path = None
+                # Downstream treats template_wrap like template for FBX skip.
+                rig_mode = "template"
             elif rig_mode == "skeleton":
                 # NOTE: using await here will make blender context incorrect
                 result_path = self.inference_engine.generate_skeleton(
@@ -233,7 +351,7 @@ class UniRigAdapter(AutoRigModel):
                 has_skinning = with_skinning
 
             # Convert rig FBX to GLB; preserve source textures when possible.
-            if rig_mode != "template":
+            if rig_mode not in ("template", "appearance_component"):
                 rig_fbx_path = Path(result_path)
                 if rig_fbx_path.suffix.lower() != ".fbx":
                     rig_fbx_path = rig_fbx_path.with_suffix(".fbx")
@@ -263,40 +381,95 @@ class UniRigAdapter(AutoRigModel):
             # Estimate bone count from output (simplified approach)
             bone_count = self._estimate_bone_count(Path(result_path))
 
-            generation_method = (
-                "humanoid_vrm_template"
-                if rig_mode == "template"
-                else "unirig_fast_inference"
-            )
+            if appearance_requested:
+                generation_method = "appearance_component_vrm_fit"
+                rig_type = "appearance_component"
+            elif rig_mode == "template":
+                generation_method = "humanoid_vrm_template"
+                rig_type = "humanoid_template"
+            else:
+                generation_method = "unirig_fast_inference"
+                rig_type = "auto_detected"
             rig_info = {
-                "rig_type": "humanoid_template" if rig_mode == "template" else "auto_detected",
+                "rig_type": rig_type,
                 "has_skinning": has_skinning,
                 "skeleton_only": rig_mode == "skeleton",
                 "generation_method": generation_method,
                 "bone_count": bone_count,
-                "rig_mode": rig_mode,
+                "rig_mode": "appearance_component" if appearance_requested else rig_mode,
             }
+            if appearance_requested:
+                rig_info["appearance_slot"] = appearance_slot
+                rig_info["equip_slot"] = equip_slot_for_appearance(appearance_slot or "Legs")
+                rig_info["validation"] = rig_validation
+                # GLB sibling kept next to VRM for debugging / non-VRM viewers
+                glb_candidate = Path(str(result_path)).with_suffix(".glb")
+                response_vrm = (
+                    str(result_path) if str(result_path).lower().endswith(".vrm") else None
+                )
+                if not response_vrm and (rig_validation or {}).get("output_vrm"):
+                    response_vrm = str(rig_validation["output_vrm"])
+            elif rig_mode == "template":
+                glb_candidate = Path(str(result_path)).with_suffix(".glb")
+                if not glb_candidate.is_file() and (rig_validation or {}).get("output_glb"):
+                    glb_candidate = Path(str(rig_validation["output_glb"]))
+                response_vrm = (
+                    str(result_path) if str(result_path).lower().endswith(".vrm") else None
+                )
+                if not response_vrm and (rig_validation or {}).get("output_vrm"):
+                    response_vrm = str(rig_validation["output_vrm"])
+            else:
+                response_vrm = None
+                glb_candidate = None
             if rig_mode == "template":
                 rig_info["humanoid_template_id"] = humanoid_template_id or "template"
                 rig_info["validation"] = rig_validation
+                if wrap_requested:
+                    rig_info["rig_mode"] = "template_wrap"
+                    rig_info["wrap_status"] = (
+                        (rig_validation or {}).get("wrap_status") or "head_stitch"
+                    )
+                    rig_info["wrap_humanoid_only"] = True
+                    rig_info["blend_shapes_on_generated_mesh"] = bool(
+                        (rig_validation or {}).get("blend_shapes_on_generated_mesh")
+                    )
+                    if (rig_validation or {}).get("morph_target_count") is not None:
+                        rig_info["morph_target_count"] = rig_validation[
+                            "morph_target_count"
+                        ]
 
             response = {
                 "output_mesh_path": str(result_path),
                 "bone_count": bone_count,
                 "rig_info": rig_info,
-                "format": output_format,
+                "format": (
+                    "vrm"
+                    if appearance_requested or (response_vrm and rig_mode == "template")
+                    else output_format
+                ),
                 "success": True,
                 "generation_info": {
                     "model": self.model_id,
                     "input_mesh": str(mesh_path),
                     "vertex_count": mesh_stats.get("vertex_count", 0),
                     "face_count": mesh_stats.get("face_count", 0),
-                    "rig_mode": rig_mode,
+                    "rig_mode": rig_info["rig_mode"],
                     "device": self.device,
                     "seed": seed,
                     "humanoid_template_id": humanoid_template_id,
+                    "appearance_slot": appearance_slot,
                 },
             }
+            if response_vrm:
+                response["output_vrm_path"] = response_vrm
+                urls = {"vrm": response_vrm}
+                if glb_candidate and Path(glb_candidate).is_file():
+                    urls["glb"] = str(glb_candidate)
+                    response["output_mesh_path_glb"] = str(glb_candidate)
+                response["download_urls"] = urls
+                # Keep output_mesh_path pointing at primary download (VRM).
+                response["output_mesh_path"] = response_vrm
+                response["format"] = "vrm"
 
             logger.info(f"UniRig auto-rigging completed: {result_path}")
             self.status = ModelStatus.LOADED
@@ -393,14 +566,18 @@ class UniRigAdapter(AutoRigModel):
             "parameters": {
                 "rig_mode": {
                     "type": "string",
-                    "description": "Rigging mode: skeleton, skin, full, or template VRM fit",
+                    "description": (
+                        "Rigging mode: skeleton, skin, full, template VRM fit, or "
+                        "template_wrap (humanoid Phase 5 head stitch + optional GNM "
+                        "identity / face likeness; not for creatures)"
+                    ),
                     "default": "full",
-                    "enum": ["skeleton", "skin", "full", "template"],
+                    "enum": ["skeleton", "skin", "full", "template", "template_wrap"],
                     "required": False,
                 },
                 "humanoid_template_id": {
                     "type": "string",
-                    "description": "Template id when rig_mode is template (default: template → template.vrm)",
+                    "description": "Template id when rig_mode is template or template_wrap (default: template → template.vrm)",
                     "default": "template",
                     "required": False,
                 },
@@ -416,6 +593,69 @@ class UniRigAdapter(AutoRigModel):
                     "description": "Whether to apply skinning weights (only for full mode)",
                     "default": True,
                     "required": False
-                }
+                },
+                "gnm_identity": {
+                    "type": "boolean",
+                    "description": "Warp template head Basis toward GNM IdentitySampler (ethnicity/gender)",
+                    "default": False,
+                    "required": False,
+                },
+                "character_gender": {
+                    "type": "string",
+                    "enum": ["male", "female"],
+                    "description": "GNM gender class for identity sampling",
+                    "required": False,
+                },
+                "character_ethnicity": {
+                    "type": "string",
+                    "enum": ["asian", "black", "white", "middle_eastern"],
+                    "description": "GNM ethnicity class for identity sampling",
+                    "required": False,
+                },
+                "gnm_bake_expressions": {
+                    "type": "boolean",
+                    "description": "Bake additive GNM expression morphs onto template head",
+                    "default": False,
+                    "required": False,
+                },
+                "face_likeness": {
+                    "type": "boolean",
+                    "description": "Blend face likeness onto template (MeshMonk/RBF)",
+                    "default": False,
+                    "required": False,
+                },
+                "likeness_alpha": {
+                    "type": "number",
+                    "description": "Face likeness blend weight (0–1)",
+                    "default": 0.65,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "required": False,
+                },
+                "likeness_source": {
+                    "type": "string",
+                    "enum": ["auto", "selfie", "body_roi"],
+                    "description": (
+                        "Likeness mesh source: selfie (MediaPipe from likeness_image), "
+                        "body_roi (crop AIGC mesh), or auto (selfie if image provided)"
+                    ),
+                    "default": "auto",
+                    "required": False,
+                },
+                "likeness_image_path": {
+                    "type": "string",
+                    "description": "Local path to selfie image for likeness_source=selfie/auto",
+                    "required": False,
+                },
+                "likeness_image_file_id": {
+                    "type": "string",
+                    "description": "Uploaded selfie file id (resolved by API to likeness_image_path)",
+                    "required": False,
+                },
+                "gnm_seed": {
+                    "type": "integer",
+                    "description": "RNG seed for GNM identity/expression sampling",
+                    "required": False,
+                },
             }
         }

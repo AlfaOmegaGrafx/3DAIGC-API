@@ -9,6 +9,8 @@ import pytest
 
 from core.utils.format_utils import (
     apply_humanoid_template_rig,
+    apply_humanoid_template_wrap,
+    count_glb_morph_targets,
     extract_vrm_skeleton_fbx,
 )
 from core.utils.humanoid_template import (
@@ -118,3 +120,29 @@ def test_apply_template_to_textured_mesh():
         rigged = analyze_glb(out)
         assert rigged.has_skin
         assert rigged.joint_counts[0] >= 40
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    SKIP_BLENDER or not template_paths_available() or not BIRD_TEXTURED.is_file(),
+    reason=SKIP_REASON,
+)
+def test_apply_template_wrap_head_stitch_keeps_morphs():
+    """
+    Phase 5: template head morphs survive so jaw_drop / blink can drive XR face path.
+    Bird mesh is a stand-in body; morph count must be > 0 on the exported GLB.
+    """
+    spec = get_template("template")
+    with tempfile.TemporaryDirectory(prefix="template_wrap_") as tmp:
+        out = Path(tmp) / "stitched.glb"
+        path, validation = apply_humanoid_template_wrap(
+            str(spec.vrm_path), str(BIRD_TEXTURED), str(out)
+        )
+        assert Path(path).is_file()
+        assert validation.get("wrap_status") == "head_stitch"
+        assert validation.get("blend_shapes_on_generated_mesh") is True
+        morphs = validation.get("morph_target_count") or count_glb_morph_targets(path)
+        # template.vrm has 124 morphs; after neck cut we still need a usable face set.
+        assert morphs >= 8, f"expected face morphs for XR drivers, got {morphs}"
+        rigged = analyze_glb(out)
+        assert rigged.has_skin

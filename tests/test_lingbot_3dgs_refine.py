@@ -30,7 +30,7 @@ def test_point_cloud_to_gaussian_ply_header(tmp_path: Path):
     verts = np.random.randn(500, 3).astype(np.float32)
     colors = np.random.randint(0, 255, (500, 3), dtype=np.uint8)
     out = tmp_path / "g.ply"
-    n = point_cloud_to_gaussian_ply(verts, colors, out)
+    n = point_cloud_to_gaussian_ply(verts, colors, out, scale=0.012)
     assert n == 500
     head = out.read_bytes()[:400].decode("ascii", errors="ignore")
     assert "element vertex 500" in head
@@ -39,6 +39,43 @@ def test_point_cloud_to_gaussian_ply_header(tmp_path: Path):
     assert "scale_0" in head
     assert "rot_0" in head
     assert "property uchar red" not in head
+
+
+def test_point_cloud_to_gaussian_adaptive_scales_smaller_than_legacy(tmp_path: Path):
+    rng = np.random.default_rng(0)
+    # Dense local cluster — adaptive scales should be << legacy 0.012
+    verts = (rng.normal(size=(2000, 3)) * 0.01).astype(np.float32)
+    colors = np.full((2000, 3), 120, dtype=np.uint8)
+    out = tmp_path / "adaptive.ply"
+    point_cloud_to_gaussian_ply(verts, colors, out)  # scale=None → adaptive
+    raw = out.read_bytes()
+    # skip header
+    payload = raw.split(b"end_header\n", 1)[1]
+    dtype = np.dtype(
+        [
+            ("x", "<f4"),
+            ("y", "<f4"),
+            ("z", "<f4"),
+            ("nx", "<f4"),
+            ("ny", "<f4"),
+            ("nz", "<f4"),
+            ("f_dc_0", "<f4"),
+            ("f_dc_1", "<f4"),
+            ("f_dc_2", "<f4"),
+            ("opacity", "<f4"),
+            ("scale_0", "<f4"),
+            ("scale_1", "<f4"),
+            ("scale_2", "<f4"),
+            ("rot_0", "<f4"),
+            ("rot_1", "<f4"),
+            ("rot_2", "<f4"),
+            ("rot_3", "<f4"),
+        ]
+    )
+    arr = np.frombuffer(payload, dtype=dtype)
+    lin = np.exp(arr["scale_0"])
+    assert float(np.median(lin)) < 0.006
+    assert float(np.median(lin)) > 1e-4
 
 
 def test_refine_world_package_updates_manifest(tmp_path: Path):

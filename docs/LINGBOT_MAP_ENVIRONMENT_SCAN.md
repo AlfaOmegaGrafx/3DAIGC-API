@@ -13,6 +13,7 @@ Physical-replica metaverse anchoring: capture with **outward-facing** cameras wh
 | LingBot-Map weights / runtime | **Optional** — `bash scripts/install_lingbot_map.sh` |
 | Phase A: point cloud → isotropic Gaussian (Spark) | **Shipped** — `refine_to_3dgs` / `scripts/refine_env_scan_to_3dgs.py` |
 | Phase B: gsplat train on exported COLMAP | **Shipped** — `train_3dgs` / `POST /train-3dgs` / `scripts/train_env_scan_3dgs.py` |
+| Env mesh bake → OMB GLB | **Shipped** — `bake_env_mesh` / `POST /bake-env-mesh` / `scripts/bake_env_mesh.py` |
 
 ## Install (DGX)
 
@@ -211,6 +212,27 @@ python scripts/train_env_scan_3dgs.py outputs/worlds/<JOB_ID> --max-steps 10000 
 Do **not** re-enable densify or metric SVD bake. Photometric color-only refine is optional after poses are solid; PC recolor from `environment.points.ply` is safer when poses are soft.
 
 Same video can be reprocessed after the gravity lock — new scan picks up `prefer_floor=True` automatically.
+
+### Env mesh bake (OMB / RP1)
+
+Spark splat environments are **viewport-only**. Scene Assembler needs a **GLB**. After Phase A (`gs_dataset/` present):
+
+```http
+POST /api/v1/world-generation/bake-env-mesh
+{ "world_id": "<JOB_ID>", "target_face_count": 100000, "max_views": 48 }
+```
+
+Or on a new scan: `"bake_env_mesh": true` (implies Phase A). CLI:
+
+```bash
+python scripts/bake_env_mesh.py <JOB_ID> --target-faces 100000
+```
+
+Writes `environment_mesh.glb`, `collider.glb`, and sets manifest `environment.mesh_url` / `collider_url`.
+
+**Stack (commercial):** gsplat depth render (Apache) + NumPy TSDF + scikit-image marching cubes (BSD) + trimesh decimate (MIT). Open3D is not used on DGX aarch64.
+
+**Image-to-world (TripoSplat):** no multi-view cameras → bake returns 400. RP1 for I2W = TRELLIS `props/*.glb` only. Future multi-view I2W (HY-World) can call the same `/bake-env-mesh`.
 
 ## Limitations
 

@@ -1,0 +1,18 @@
+---
+description: 3DAIGC-API memory-bank is fully gitignored moat — never commit
+alwaysApply: true
+---
+
+# API memory-bank moat
+
+`3DAIGC-API/memory-bank/` is **entirely gitignored** (same policy as OpenNexus). Ops notes (Krea, Kimodo, XR voice, sessionmem seeds, activeContext) stay on disk and sync via **scp only**.
+
+## Never
+
+- `git add memory-bank/` or any file under it
+- Paste memory-bank ops detail (job IDs, token failure playbooks with secrets) into tracked `docs/`
+
+## Do
+
+- Edit local `memory-bank/*.md` as needed for agents
+- Sync with DGX ↔ Surface scp scripts when ops notes must travel

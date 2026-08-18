@@ -1,0 +1,29 @@
+---
+description: Pull vendored GNM from AlfaOmegaGrafx fork, not google/GNM
+alwaysApply: true
+---
+
+# GNM vendor source (user rule, 2026-08-14)
+
+Vendored tree: `3DAIGC-API/thirdparty/GNM` (nested git clone, **not** a submodule).
+
+## Pull / update from this fork only
+
+- **origin (required):** https://github.com/AlfaOmegaGrafx/GNM  
+- **upstream (optional compare):** https://github.com/google/GNM  
+
+```bash
+cd /home/sifr/3DAIGC-API/thirdparty/GNM
+git fetch origin
+git pull --ff-only origin main
+```
+
+## Do not
+
+- `git pull` from `google/GNM` as the default remote
+- Re-point `origin` back to `google/GNM` without explicit user request
+- Rewrite upstream README clone URLs inside the vendored tree unless syncing a fork commit that already changed them
+
+## Syncing Google → fork
+
+If google advances and the user wants those commits: fetch `upstream`, merge/rebase onto local `main`, then **`git push origin main`** to [AlfaOmegaGrafx/GNM](https://github.com/AlfaOmegaGrafx/GNM) (only when user asks to push).

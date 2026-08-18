@@ -170,6 +170,10 @@ class ModelFactory:
             "class": "UltraShapeImageToRawMeshAdapter",
         },
         # TripoSplat (MIT — image → Gaussian splats)
+        "arc2avatar_head": {
+            "module": "adapters.arc2avatar_adapter",
+            "class": "Arc2AvatarHeadAdapter",
+        },
         "triposplat_image_to_splat": {
             "module": "adapters.triposplat_adapter",
             "class": "TripoSplatImageToSplatAdapter",
@@ -194,6 +198,10 @@ class ModelFactory:
             "module": "adapters.env_scan_gsplat_train_adapter",
             "class": "EnvScanGsplatTrainAdapter",
         },
+        "env_mesh_bake": {
+            "module": "adapters.env_mesh_bake_adapter",
+            "class": "EnvMeshBakeAdapter",
+        },
         # Kimodo text-to-motion (SOMA → studio_motion.json for VRM)
         "kimodo_text_to_motion": {
             "module": "adapters.kimodo_adapter",
@@ -207,6 +215,11 @@ class ModelFactory:
         "krea2_raw_text_to_image": {
             "module": "adapters.krea2_adapter",
             "class": "Krea2RawTextToImageAdapter",
+        },
+        # Mage-Flow-Edit (isolated venv — community mirror weights)
+        "mage_flow_edit_turbo": {
+            "module": "adapters.mage_flow_edit_adapter",
+            "class": "MageFlowEditTurboAdapter",
         },
         # VoxHammer adapters
         "voxhammer_text_mesh_editing": {
@@ -456,7 +469,7 @@ def get_model_configs_from_settings(
                 # It's a ModelConfig object
                 enabled = getattr(model_config, "enabled", True)
                 if not enabled:
-                    logger.info(f"Skipping disabled model: {model_id}")
+                    logger.debug(f"Skipping disabled model: {model_id}")
                     continue
 
                 vram_requirement = getattr(model_config, "vram_requirement", 4096)
@@ -744,6 +757,11 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
     # TripoSplat (MIT)
     configs.update(
         {
+            "arc2avatar_head": ModelFactory.create_model_config(
+                model_id="arc2avatar_head",
+                feature_type="arc2avatar_head",
+                vram_requirement=24576,
+            ),
             "triposplat_image_to_splat": ModelFactory.create_model_config(
                 model_id="triposplat_image_to_splat",
                 feature_type="image_to_splat",
@@ -780,6 +798,11 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 feature_type="environment_scan",
                 vram_requirement=12288,
             ),
+            "env_mesh_bake": ModelFactory.create_model_config(
+                model_id="env_mesh_bake",
+                feature_type="environment_scan",
+                vram_requirement=10240,
+            ),
         }
     )
 
@@ -806,6 +829,17 @@ def get_default_model_configs() -> Dict[str, Dict[str, Any]]:
                 model_id="krea2_raw_text_to_image",
                 feature_type="text_to_image",
                 vram_requirement=32768,
+            ),
+        }
+    )
+
+    # Mage-Flow-Edit image editing
+    configs.update(
+        {
+            "mage_flow_edit_turbo": ModelFactory.create_model_config(
+                model_id="mage_flow_edit_turbo",
+                feature_type="image_edit",
+                vram_requirement=20480,
             ),
         }
     )

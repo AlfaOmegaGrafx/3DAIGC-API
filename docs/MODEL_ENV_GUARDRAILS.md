@@ -77,8 +77,11 @@ P3D_SKIP_PREFLIGHT=1 ./scripts/run_server.sh
 |-------|------|----------------|
 | Main API (TRELLIS, Hunyuan, Krea, …) | `venv/` | `4.57.3` (pinned) |
 | Kimodo | `.venv-kimodo` | `5.1.0` (pinned) |
+| Mage-Flow-Edit | `.venv-mage-flow` | `5.3–5.5` (isolated; do not install into main venv) |
 
 **Krea 2:** `setup_krea2.sh` installs a **pinned diffusers git ref** (`DIFFUSERS_KREA_GIT_REF`) because `Krea2Pipeline` is not in PyPI wheels yet. Do not `pip install -U transformers` outside constraints.
+
+**Mage-Flow-Edit:** `setup_mage_flow_edit.sh` — community mirror weights + subprocess runner. Default attention backend **SDPA** (flash-attn optional).
 
 ## Agent rules
 
