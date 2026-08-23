@@ -252,6 +252,7 @@ Use this when shipping OpenNexus3DStudio. **Integration effort** is approximate 
 - [ ] Document territory, MAU, or export restrictions.
 - [ ] Add row to this file and wire `download_models.sh` + `models.yaml`.
 - [ ] Never add `briaai/RMBG-2.0` or community **mirrors** of gated weights without legal review.
+- [ ] **R&D / `FUTURE_RD.md`:** same gate — do **not** park BLOCKED/UNKNOWN stacks as future build work (OpenNexus rule `rd-commercial-license-gate.mdc`). Live text-to-motion remains **Kimodo-SOMA-RP** only (SMPL-X **BLOCKED**).
 
 ---
 
