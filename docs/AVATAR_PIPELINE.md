@@ -1,23 +1,22 @@
 # Avatar pipeline (3DAIGC-API)
 
-End-to-end path: **photo → textured mesh → template VRM rig → (optional) VRM file / splat preview**.
+End-to-end path: **photo → textured mesh → humanoid template → (optional) VRM file / splat preview**.
 
 ## Assets
 
 | File | Purpose |
 |------|---------|
-| `assets/example_autorig/template.vrm` | Master humanoid VRM (124+ morph targets, ARKit/Vive presets) |
-| `assets/example_autorig/skeleton/template.fbx` | Cached skeleton extract (optional) |
-| `assets/example_autorig/regression/template.json` | Expected counts for CI |
+| Operator-local `humanoid_template.vrm` | Default Body+Cloth morph head (`humanoid_template_id=humanoid`). Not shipped in the public tree — set `HUMANOID_TEMPLATE_VRM` or place at `assets/example_autorig/humanoid_template.vrm`. |
+| `assets/example_autorig/appearance_base.vrm` | Appearance clothing fit base (slots) |
 
-Legacy alias: template id `sifr2` → same files.
+Deprecated request ids normalize to `humanoid`.
 
 ## API endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `POST /api/v1/mesh-generation/image-to-textured-mesh` | TRELLIS / Hunyuan mesh from image |
-| `POST /api/v1/auto-rigging/generate-rig` | Auto-rig; use `rig_mode: "template"`, `humanoid_template_id: "template"` |
+| `POST /api/v1/auto-rigging/generate-rig` | Auto-rig; use `rig_mode: "template"`, `humanoid_template_id: "humanoid"` |
 | `GET /api/v1/auto-rigging/humanoid-templates/{id}/manifest` | Template metadata for frontend VRM export |
 | `POST /api/v1/splat-generation/image-to-splat` | TripoSplat → `.ply` / `.splat` (Spark.js preview) |
 | `POST /api/v1/world-generation/image-to-world` | World package: splat environment + optional mesh props |
@@ -55,7 +54,7 @@ See [API avatar rig contract](API_AVATAR_RIG_CONTRACT.md) for export validation 
 | Approach | Blend shapes on avatar? | Status |
 |----------|-------------------------|--------|
 | Template rig (bones-only) | No — skeleton only on AIGC mesh | **Implemented** |
-| Head stitch (`rig_mode: template_wrap`) | Yes — keep `template.vrm` head morphs + AIGC body | **Phase 5 MVP** ([MESH_WRAP_ROADMAP.md](MESH_WRAP_ROADMAP.md)) |
+| Head stitch (`rig_mode: template_wrap`) | Yes — keep morph head + AIGC body | **Phase 5 MVP** ([MESH_WRAP_ROADMAP.md](MESH_WRAP_ROADMAP.md)) |
 | MeshMonk dense wrap | Yes — AIGC face likeness onto morph topo | **Deferred** (Phase 4, after stitch) |
 | Shrinkwrap shape-key transfer | Uncertain on AIGC topo | **Optional R&D** (Phase 3 demoted) |
 | Creature / SkinTokens face | Bone retarget (`jaw`/`chin`/`eye`) | **Client** `creatureFaceRetarget.js` — not MeshMonk |

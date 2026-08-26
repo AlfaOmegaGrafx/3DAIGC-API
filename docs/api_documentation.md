@@ -957,7 +957,7 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVAT
   - `mesh_file_id`: File ID from upload endpoint (**recommended**)
 - **Parameters**:
   - `rig_mode`: Rig mode (`skeleton`, `skin`, `full`, or **`template`** for humanoid template VRM)
-  - `humanoid_template_id`: When `rig_mode` is `template`, template id (default **`template`**; legacy alias `sifr2`)
+  - `humanoid_template_id`: When `rig_mode` is `template`, template id (default **`humanoid`**; deprecated ids map to `humanoid`)
   - `output_format`: Output format (`glb` recommended for template mode)
   - `model_preference`: Model to use for rigging (`unirig_auto_rig`)
 
@@ -967,7 +967,7 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVAT
 {
   "mesh_file_id": "<uploaded glb>",
   "rig_mode": "template",
-  "humanoid_template_id": "template",
+  "humanoid_template_id": "humanoid",
   "output_format": "glb",
   "model_preference": "unirig_auto_rig"
 }
@@ -976,12 +976,12 @@ Skinned humanoid GLB exports must satisfy the [API avatar rig contract](API_AVAT
 ### Humanoid Template Manifest
 - **URL**: `/api/v1/auto-rigging/humanoid-templates/{template_id}/manifest`
 - **Method**: `GET`
-- **Description**: Metadata for `template.vrm` (bone counts, blend-shape preset names) used by OpenNexus3DStudio VRM export
+- **Description**: Metadata for humanoid template (bone counts, blend-shape preset names) used by OpenNexus3DStudio VRM export
 - **Authentication**: None required
 - **Response** (abbreviated):
 ```json
 {
-  "template_id": "template",
+  "template_id": "humanoid",
   "description": "OpenNexus humanoid template VRM",
   "expected": { "blend_shape_groups": 124, "human_bones": 55 }
 }

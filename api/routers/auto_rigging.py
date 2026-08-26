@@ -20,6 +20,7 @@ from core.scheduler.multiprocess_scheduler import MultiprocessModelScheduler
 from core.utils.humanoid_template import (
     get_template,
     load_template_manifest,
+    normalize_humanoid_template_id,
     template_paths_available,
     validate_humanoid_template,
 )
@@ -141,7 +142,7 @@ def reject_non_humanoid_template_wrap(
     pref = (model_preference or "").strip()
     if pref == "creature_template_auto_rig":
         return (
-            "template_wrap is humanoid-only (UniRig + template.vrm head stitch). "
+            "template_wrap is humanoid-only (UniRig + morph head stitch). "
             "Use rig_mode=creature_template for Mesh2Motion creatures, "
             "or SkinTokens for non-humanoid AIGC; face motion uses "
             "client creatureFaceRetarget, not MeshMonk."
@@ -356,36 +357,39 @@ async def generate_rig(
 @router.get("/humanoid-templates/{template_id}/manifest")
 async def get_humanoid_template_manifest(template_id: str):
     """
-    Return regression manifest + live VRM analysis for template.vrm.
+    Return regression manifest + live VRM analysis for the humanoid template.
     Used by OpenNexus3DStudio VRM export and expression planning.
     """
     try:
-        spec = get_template(template_id)
+        resolved_id = normalize_humanoid_template_id(template_id)
+        spec = get_template(resolved_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    manifest = load_template_manifest(template_id)
-    errors = validate_humanoid_template(template_id) if template_paths_available(template_id) else [
-        f"Template VRM missing: {spec.vrm_path}"
-    ]
+    manifest = load_template_manifest(resolved_id)
+    errors = (
+        validate_humanoid_template(resolved_id)
+        if template_paths_available(resolved_id)
+        else [f"Template VRM missing: {spec.vrm_path}"]
+    )
 
     return {
-        "template_id": template_id,
+        "template_id": resolved_id,
         "vrm_path": str(spec.vrm_path),
         "skeleton_fbx_path": str(spec.skeleton_fbx_path),
-        "available": template_paths_available(template_id),
+        "available": template_paths_available(resolved_id),
         "validation_errors": errors,
         "expected": manifest.get("expected", {}),
         "description": manifest.get(
             "description",
-            "Master humanoid VRM (template.vrm) with facial blend shapes",
+            "Operator-local humanoid VRM with ARKit blend shapes",
         ),
         "blend_shapes_on_generated_mesh": True,
         "wrap_status": "head_stitch",
         "wrap_humanoid_only": True,
         "documentation": "/docs/AVATAR_PIPELINE.md",
         "note": (
-            "template_wrap Phase 5 keeps template.vrm head morphs + AIGC body. "
+            "template_wrap Phase 5 keeps morph head + AIGC body. "
             "MeshMonk likeness (Phase 4) is deferred. Creatures use creatureFaceRetarget."
         ),
     }

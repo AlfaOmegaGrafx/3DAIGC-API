@@ -30,7 +30,7 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 * **Frontend ↔ API** — OpenNexus3DStudio loads task results via `fromAigc` + `preserveExportedOrientation`; uploaded VRM uses `vrmLoader` only. Cross-repo contract: `OpenNexus3DStudio/docs/api/api.md` ↔ [api_documentation.md](docs/api_documentation.md).
 
 #### Updates 06.13 (OpenNexus3DStudio / local GPU)
-* **Template VRM rig** — `rig_mode: template` on `POST /api/v1/auto-rigging/generate-rig` applies `assets/example_autorig/template.vrm` skeleton to AIGC meshes (Blender pipeline in `scripts/blender/`).
+* **Template VRM rig** — `rig_mode: template` on `POST /api/v1/auto-rigging/generate-rig` applies `operator-local humanoid_template.vrm` skeleton to AIGC meshes (Blender pipeline in `scripts/blender/`).
 * **Image → World Package** — `POST /api/v1/world-generation/image-to-world` produces splat environment + optional mesh props; download via `GET /jobs/{id}/download?asset=manifest`.
 * **Environment Scan (LingBot)** — `POST /api/v1/world-generation/environment-scan` + Phase A/B 3DGS (`refine_to_3dgs`, `/train-3dgs`); see [LINGBOT_MAP_ENVIRONMENT_SCAN.md](docs/LINGBOT_MAP_ENVIRONMENT_SCAN.md).
 * **Image → Gaussian Splat** — `POST /api/v1/splat-generation/image-to-splat` (TripoSplat) for Spark.js preview in OpenNexus3DStudio.
@@ -74,7 +74,7 @@ The system is powered with GPU resource management, concurrent and VRAM-aware GP
 
 ### Avatar pipeline (OpenNexus3DStudio)
 
-Photo → TRELLIS mesh → **template.vrm** rig → optional VRM download + TripoSplat preview. Full design, blend-shape roadmap, and rig alignment notes: **[docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)** (wrap: [MESH_WRAP_ROADMAP.md](docs/MESH_WRAP_ROADMAP.md), Arc2Avatar: [ARC2AVATAR_TRACK.md](docs/ARC2AVATAR_TRACK.md)).
+Photo → TRELLIS mesh → **humanoid** template rig → optional VRM download + TripoSplat preview. Full design, blend-shape roadmap, and rig alignment notes: **[docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)** (wrap: [MESH_WRAP_ROADMAP.md](docs/MESH_WRAP_ROADMAP.md), Arc2Avatar: [ARC2AVATAR_TRACK.md](docs/ARC2AVATAR_TRACK.md)).
 
 Client repo: [OpenNexus3DStudio](https://github.com/AlfaOmegaGrafx/OpenNexus3DStudio) — task UI, viewport, VRM export. API contract: [API_AVATAR_RIG_CONTRACT.md](docs/API_AVATAR_RIG_CONTRACT.md).
 
@@ -94,7 +94,7 @@ The VRAM requirement is from the pytest results, tested on a single 4090 GPU.
 | Model | Input | Output | VRAM | Features |
 |-------|-------|--------|------|----------|
 | **[UniRig](https://github.com/VAST-AI-Research/UniRig)** | Mesh | Rigged Mesh | 9GB | Automatic skeleton generation |
-| **Template VRM** (`rig_mode: template`) | Mesh | Rigged GLB | — | Applies `template.vrm` skeleton to AIGC mesh (bones-only; see [docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)) |
+| **Template VRM** (`rig_mode: template`) | Mesh | Rigged GLB | — | Applies humanoid template skeleton to AIGC mesh (bones-only; see [docs/AVATAR_PIPELINE.md](docs/AVATAR_PIPELINE.md)) |
 
 ### Image to Gaussian Splat
 | Model | Input | Output | VRAM | Features |
@@ -417,7 +417,7 @@ curl -X POST "http://localhost:7842/api/v1/auto-rigging/generate-rig" \
   -d '{
     "mesh_file_id": "char_xyz789",
     "rig_mode": "template",
-    "humanoid_template_id": "template",
+    "humanoid_template_id": "humanoid",
     "output_format": "glb",
     "model_preference": "unirig_auto_rig"
   }'

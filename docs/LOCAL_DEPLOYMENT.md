@@ -93,7 +93,7 @@ Environment overrides (common):
 | `Error 111 connecting to localhost:6379` | Start Redis: `docker start 3daigc-redis` |
 | Jobs stuck / empty history after Redis outage | Restart Redis + API; stale queue data may be lost — re-submit jobs |
 | Scheduler not running | Check `run/scheduler.pid`, `logs/scheduler.log` |
-| Template rig fails | Verify `BLENDER_BIN`, `assets/example_autorig/template.vrm` |
+| Template wrap fails | Verify `BLENDER_BIN` and operator-local `humanoid_template.vrm` (`HUMANOID_TEMPLATE_VRM`) |
 | VRAM OOM | Disable unused models in `config/models.yaml` |
 
 ## OpenNexus3DStudio integration

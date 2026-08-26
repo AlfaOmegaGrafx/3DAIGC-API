@@ -20,7 +20,7 @@
 - **Adapter** — Python wrapper that loads a thirdparty model and implements one feature contract.
 - **World package** — `world.manifest.json` + assets for OpenNexus splat/mesh worlds.
 - **Environment scan** — walk video / frames → LingBot-Map recon → world package (+ optional metric scale).
-- **Template rig** — Blender path applying `assets/example_autorig/template.vrm` skeleton to AIGC meshes.
+- **Template rig** — Blender path applying humanoid template (`humanoid_template_id=humanoid`) to AIGC meshes.
 - **MSF** — Metaverse Scene Format fabric hosted by MSF_Map_Svc (separate repo), not LingBot.
 
 ## Landmines (cross-cutting gotchas, ≤15; area-specific ones belong in .agent/areas/)

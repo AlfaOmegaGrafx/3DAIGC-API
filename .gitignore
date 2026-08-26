@@ -477,6 +477,7 @@ memory-bank/
 # Moat — creature / appearance auto-rig (local only; never commit/push)
 adapters/creature_template_adapter.py
 adapters/appearance_component_adapter.py
+assets/moat/
 assets/creature_autorig/
 assets/example_image/fox_test.png
 core/utils/creature_template.py
@@ -489,3 +490,7 @@ scripts/blender_mcp_load_job.py
 scripts/list_blender_mcp_targets.py
 tests/test_creature_template_rig.py
 tests/test_appearance_component_slots.py
+assets/example_autorig/humanoid_template.vrm
+assets/example_autorig/humanoid_template_headbody.glb
+assets/example_autorig/template_ict.vrm
+assets/example_autorig/template_ict_headbody.glb

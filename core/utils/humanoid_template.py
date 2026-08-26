@@ -1,12 +1,17 @@
 """
 Humanoid VRM template registry (master rig + blend shapes).
 
-Reference template: ``template.vrm`` — VRM 0.x humanoid with facial tracking blend shapes.
-Legacy id ``sifr2`` resolves to the same template for backward compatibility.
+Product template id: ``humanoid`` — operator-local morph-head VRM + humanoid armature.
+Resolution order (first existing file wins):
+
+1. ``HUMANOID_TEMPLATE_VRM`` env (absolute path)
+2. ``assets/example_autorig/humanoid_template.vrm`` (gitignored; usually a symlink)
+3. Operator moat wrap ``assets/moat/ict/template_ict.vrm`` (gitignored local stack)
 """
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -16,6 +21,37 @@ from core.utils.vrm_inspection import VrmAnalysis, analyze_vrm
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "assets" / "example_autorig"
 REGRESSION_DIR = TEMPLATE_DIR / "regression"
+MOAT_WRAP_VRM = REPO_ROOT / "assets" / "moat" / "ict" / "template_ict.vrm"
+MOAT_SKELETON_FBX = REPO_ROOT / "assets" / "moat" / "ict" / "skeleton" / "template.fbx"
+
+# Deprecated request ids → product default
+_DEPRECATED_TEMPLATE_IDS = frozenset({"template", "sifr2", "ict"})
+
+_DEFAULT_TEMPLATE_ID = "humanoid"
+
+
+def _resolve_humanoid_vrm_path() -> Path:
+    env = (os.environ.get("HUMANOID_TEMPLATE_VRM") or "").strip()
+    if env:
+        return Path(env)
+    local = TEMPLATE_DIR / "humanoid_template.vrm"
+    if local.is_file():
+        return local
+    if MOAT_WRAP_VRM.is_file():
+        return MOAT_WRAP_VRM
+    return local
+
+
+def _resolve_humanoid_skeleton_fbx() -> Path:
+    env = (os.environ.get("HUMANOID_TEMPLATE_SKELETON_FBX") or "").strip()
+    if env:
+        return Path(env)
+    local = TEMPLATE_DIR / "skeleton" / "template.fbx"
+    if local.is_file():
+        return local
+    if MOAT_SKELETON_FBX.is_file():
+        return MOAT_SKELETON_FBX
+    return local
 
 
 @dataclass(frozen=True)
@@ -30,45 +66,57 @@ class HumanoidTemplateSpec:
     required_presets: tuple[str, ...] = ("blink", "neutral")
 
 
-_TEMPLATE_SPEC = HumanoidTemplateSpec(
-    template_id="template",
-    vrm_path=TEMPLATE_DIR / "template.vrm",
-    skeleton_fbx_path=TEMPLATE_DIR / "skeleton" / "template.fbx",
-    min_morph_targets=100,
-    min_blend_shape_groups=100,
-    min_skin_joints=60,
-    min_human_bones=50,
-    required_presets=("blink", "blink_l", "blink_r", "neutral"),
-)
-
-TEMPLATES: dict[str, HumanoidTemplateSpec] = {
-    "template": _TEMPLATE_SPEC,
-    "sifr2": _TEMPLATE_SPEC,  # deprecated alias
-}
+def _humanoid_spec() -> HumanoidTemplateSpec:
+    return HumanoidTemplateSpec(
+        template_id=_DEFAULT_TEMPLATE_ID,
+        vrm_path=_resolve_humanoid_vrm_path(),
+        skeleton_fbx_path=_resolve_humanoid_skeleton_fbx(),
+        min_morph_targets=50,
+        min_blend_shape_groups=40,
+        min_skin_joints=40,
+        min_human_bones=40,
+        required_presets=("blink", "blink_l", "blink_r", "neutral"),
+    )
 
 
-def get_template(template_id: str) -> HumanoidTemplateSpec:
-    key = template_id.lower().strip()
-    if key not in TEMPLATES:
+def normalize_humanoid_template_id(template_id: str | None) -> str:
+    """Map deprecated ids to product default ``humanoid``."""
+    key = (template_id or _DEFAULT_TEMPLATE_ID).lower().strip()
+    if key in _DEPRECATED_TEMPLATE_IDS:
+        return _DEFAULT_TEMPLATE_ID
+    return key or _DEFAULT_TEMPLATE_ID
+
+
+def get_template(template_id: str = _DEFAULT_TEMPLATE_ID) -> HumanoidTemplateSpec:
+    key = normalize_humanoid_template_id(template_id)
+    if key != _DEFAULT_TEMPLATE_ID:
         raise KeyError(
             f"Unknown humanoid template '{template_id}'. "
-            f"Available: {sorted(set(TEMPLATES))}"
+            f"Available: [{_DEFAULT_TEMPLATE_ID!r}]"
         )
-    return TEMPLATES[key]
+    return _humanoid_spec()
 
 
-def template_paths_available(template_id: str = "template") -> bool:
-    spec = get_template(template_id)
-    return spec.vrm_path.is_file()
+def template_paths_available(template_id: str = _DEFAULT_TEMPLATE_ID) -> bool:
+    return get_template(template_id).vrm_path.is_file()
 
 
-def skeleton_reference_available(template_id: str = "template") -> bool:
-    spec = get_template(template_id)
-    return spec.skeleton_fbx_path.is_file()
+def resolve_default_humanoid_template_id() -> str:
+    if template_paths_available(_DEFAULT_TEMPLATE_ID):
+        return _DEFAULT_TEMPLATE_ID
+    raise FileNotFoundError(
+        "humanoid_template.vrm missing — set HUMANOID_TEMPLATE_VRM, place "
+        "assets/example_autorig/humanoid_template.vrm, or build moat wrap "
+        "assets/moat/ict/template_ict.vrm"
+    )
+
+
+def skeleton_reference_available(template_id: str = _DEFAULT_TEMPLATE_ID) -> bool:
+    return get_template(template_id).skeleton_fbx_path.is_file()
 
 
 def validate_humanoid_template(
-    template_id: str = "template",
+    template_id: str = _DEFAULT_TEMPLATE_ID,
     analysis: Optional[VrmAnalysis] = None,
 ) -> list[str]:
     spec = get_template(template_id)
@@ -112,19 +160,18 @@ def validate_humanoid_template(
     return errors
 
 
-def assert_humanoid_template(template_id: str = "template") -> VrmAnalysis:
+def assert_humanoid_template(template_id: str = _DEFAULT_TEMPLATE_ID) -> VrmAnalysis:
     errors = validate_humanoid_template(template_id)
     if errors:
         raise ValueError("Humanoid template validation failed:\n  - " + "\n  - ".join(errors))
     return analyze_vrm(get_template(template_id).vrm_path)
 
 
-def load_template_manifest(template_id: str = "template") -> dict:
+def load_template_manifest(template_id: str = _DEFAULT_TEMPLATE_ID) -> dict:
+    key = normalize_humanoid_template_id(template_id)
     candidates = [
-        REGRESSION_DIR / f"{template_id}_template.json",
-        REGRESSION_DIR / "template.json",
-        REGRESSION_DIR / f"{template_id}.json",
-        REGRESSION_DIR / "sifr2_template.json",
+        REGRESSION_DIR / f"{key}_template.json",
+        REGRESSION_DIR / f"{key}.json",
     ]
     for path in candidates:
         if path.is_file():

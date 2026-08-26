@@ -2,7 +2,7 @@
 
 **Hard prerequisite:** Any model integrated into OpenNexus3DStudio or shipped to paying users must be **cleared for commercial use** under its license. Research-only or personal-use weights are **not allowed** in production builds.
 
-This document is the source of truth. Re-check upstream licenses when upgrading weights or swapping mirrors (e.g. `fishwowater/*` vs `tencent/*`).
+This document is the source of truth for **weights / datasets / model code**. For **npm/client/Companion** copyleft hygiene see [`OpenNexus3DStudio/docs/LICENSE_COMPLIANCE.md`](../../OpenNexus3DStudio/docs/LICENSE_COMPLIANCE.md). Re-check upstream licenses when upgrading weights or swapping mirrors (e.g. `fishwowater/*` vs `tencent/*`).
 
 **Legend**
 
@@ -104,6 +104,26 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 - Weights on HF tagged **Apache-2.0** (commercial-friendly).
 - Pipeline still depends on **Hunyuan3D-2.1** for coarse mesh → inherits Tencent **CONDITIONAL** rules.
 
+### ARKit-compatible morph head
+- ARKit-compatible morph head topology is **operator-local** (not in the public tree). **FLAME / Max Planck** blocked.
+
+### NVIDIA Open Model License — shared obligations (all NOM weights)
+
+Applies to every model we run under the [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) (last modified **2025-10-24**), including **Kimodo-SOMA-RP** and Companion **Live Speech** speech weights.
+
+| Obligation | Requirement |
+|------------|-------------|
+| **Commercial use** | Permitted (perpetual, royalty-free) if you fully comply with the Agreement. |
+| **Trustworthy AI** | Use must be consistent with [NVIDIA Trustworthy AI terms](https://www.nvidia.com/en-us/agreements/trustworthy-ai/terms/) (§2.3): inform users of AI nature/limits; mitigate bias/harm; **prohibited** — illegal surveillance; illegal biometric collection/processing without required consent; illegal harassment/abuse; intentionally misleading others. |
+| **Guardrails** | Do **not** bypass/disable/circumvent model safety Guardrails without a substantially similar Guardrail for your use case — rights terminate automatically. |
+| **Redistribution** | If you distribute Model/Derivative Model copies: include the Agreement **and** a `Notice` text file with: `Licensed by NVIDIA Corporation under the NVIDIA Open Model License`. Canonical copy: [`docs/NOTICE-NVIDIA-OPEN-MODELS`](./NOTICE-NVIDIA-OPEN-MODELS). |
+| **Outputs** | NVIDIA claims **no ownership** of outputs; **you** are responsible for outputs and subsequent uses. |
+| **Export** | Comply with applicable export/import/sanctions laws (incl. U.S. EAR / OFAC). |
+| **Cosmos branding** | “Built on NVIDIA Cosmos” only if you distribute/build on a **NVIDIA Cosmos Model** — **not** required for Kimodo or Companion Live Speech. |
+| **Litigation termination** | Suing alleging Model infringement terminates your license for that Model. |
+
+**Do not confuse** NVIDIA Open Model (commercial OK) with NVIDIA **Source / R&D** licenses on PartField, PartPacker, Kimodo-SMPLX — those stay **BLOCKED**.
+
 ### NVIDIA Kimodo text-to-motion (`kimodo_text_to_motion`)
 
 **What we ship:** `Kimodo-SOMA-RP-v1.1` via `adapters/kimodo_adapter.py` (SOMA skeleton → `studio_motion.json` for uploaded VRM).
@@ -111,7 +131,7 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | Asset | Source | License | Commercial | Action |
 |-------|--------|---------|--------------|--------|
 | Kimodo Python package | [nv-tlabs/kimodo](https://github.com/nv-tlabs/kimodo) | Apache-2.0 | **OK** | Code in `thirdparty/kimodo` |
-| **Kimodo-SOMA-RP-v1.1** (default) | [HF Kimodo collection](https://huggingface.co/collections/nvidia/kimodo-v1) | [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) | **CONDITIONAL** | **Allowed for commercial product use** under NVIDIA Open Model terms (accept HF/NVIDIA terms; follow redistribution/output rules). |
+| **Kimodo-SOMA-RP-v1.1** (default) | [HF Kimodo collection](https://huggingface.co/collections/nvidia/kimodo-v1) | [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) | **CONDITIONAL** | **Allowed for commercial product use** under NVIDIA Open Model terms (accept HF/NVIDIA terms; follow redistribution/output rules). Ship [`NOTICE-NVIDIA-OPEN-MODELS`](./NOTICE-NVIDIA-OPEN-MODELS) with any weight redistribution. |
 | Kimodo-SOMA/G1 **SEED** | Same collection | NVIDIA Open Model + **BONES-SEED** dataset license | **CONDITIONAL** | Benchmark/seed weights — not used in API adapter; review BONES-SEED if enabling. |
 | **Kimodo-SMPLX-RP-v1** | Same collection | **NVIDIA R&D / internal scientific R&D model license** | **BLOCKED** | Non-commercial R&D only — **do not expose** in OpenNexus3DStudio or `models.yaml`. |
 | Kimodo-G1-RP | Same collection | NVIDIA Open Model | **CONDITIONAL** | Robot (Unitree G1) skeleton — not wired; different retarget path than VRM. |
@@ -120,6 +140,16 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 | Output **NPZ** / **studio_motion.json** | Generated at inference | Governed by model license + your ToS | **OK** (typical) | User prompts → motion artifacts; do not redistribute pretrained weights. |
 
 **Audit conclusion:** **No conflict** if the API stays on **Kimodo-SOMA-RP-v1.1** only. **SMPL-X NPZ weights are BLOCKED** for commercial OpenNexus3DStudio — same class as NVIDIA PartField/PartPacker R&D licenses. G1/SOMA NPZ checkpoint families other than SOMA-RP-v1.1 need separate legal review before enabling.
+
+### Companion Live Speech (speech stack) + Kyutai Moshi
+
+| Asset | Source | License | Commercial | Action |
+|-------|--------|---------|--------------|--------|
+| Companion **Live Speech** weights (HF-gated NVIDIA speech model on DGX) | NVIDIA HF (gated) | [NVIDIA Open Model](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) + [Trustworthy AI](https://www.nvidia.com/en-us/agreements/trustworthy-ai/terms/) | **CONDITIONAL** | Accept HF/NVIDIA terms; keep NOM Notice with any weight redistribution; UI must disclose AI speech limitations. Full stack names/ops: gitignored `memory-bank/live-speech-license-compliance.md`. |
+| Moshi base (architecture / reference weights) | [`kyutai/moshiko-pytorch-bf16`](https://huggingface.co/kyutai/moshiko-pytorch-bf16) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | **CONDITIONAL** | Attribution to **Kyutai / Moshi** required when sharing or redistributing Moshi material; do not imply Kyutai endorsement. |
+| Live Speech motion (`/motion-generation/interactive-motion`, DGX-only) | Moat motion stack | See moat license notes | **CONDITIONAL** | Public product name: **Live Speech motion** only. |
+
+> Public product/docs use **Live Speech** / **Live Speech motion** only. Vendor speech backend names stay in gitignored moat docs (`verify:moat-docs`).
 
 ### Krea 2 (`krea2_turbo_text_to_image`, `krea2_raw_text_to_image`)
 
@@ -252,11 +282,13 @@ Use this when shipping OpenNexus3DStudio. **Integration effort** is approximate 
 - [ ] Document territory, MAU, or export restrictions.
 - [ ] Add row to this file and wire `download_models.sh` + `models.yaml`.
 - [ ] Never add `briaai/RMBG-2.0` or community **mirrors** of gated weights without legal review.
+- [ ] **NVIDIA Open Model:** ship [`NOTICE-NVIDIA-OPEN-MODELS`](./NOTICE-NVIDIA-OPEN-MODELS) with redistributed weights; follow Trustworthy AI; do not strip Guardrails.
+- [ ] **CC-BY assets (e.g. Kyutai Moshi):** retain creator attribution + license URI.
 - [ ] **R&D / `FUTURE_RD.md`:** same gate — do **not** park BLOCKED/UNKNOWN stacks as future build work (OpenNexus rule `rd-commercial-license-gate.mdc`). Live text-to-motion remains **Kimodo-SOMA-RP** only (SMPL-X **BLOCKED**).
 
 ---
 
-*Last audited: 2026-05-29. Not legal advice — have counsel review before commercial launch.*
+*Last audited: 2026-08-23 (NVIDIA Open Model + Trustworthy AI + Moshi CC-BY). Not legal advice — have counsel review before commercial launch.*
 
 ## Arc2Avatar / Arc2Face / FLAME
 

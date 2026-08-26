@@ -31,7 +31,11 @@ from core.utils.format_utils import (
     merge_rigged_fbx_with_source_mesh,
     source_mesh_has_textures,
 )
-from core.utils.humanoid_template import get_template, template_paths_available
+from core.utils.humanoid_template import (
+    get_template,
+    normalize_humanoid_template_id,
+    resolve_default_humanoid_template_id,
+)
 from core.utils.mesh_utils import MeshProcessor
 
 if TYPE_CHECKING:
@@ -257,7 +261,9 @@ class UniRigAdapter(AutoRigModel):
                 has_skinning = True
                 appearance_slot = slot
             elif rig_mode in ("template", "template_wrap"):
-                template_id = humanoid_template_id or "template"
+                template_id = normalize_humanoid_template_id(
+                    humanoid_template_id or resolve_default_humanoid_template_id()
+                )
                 spec = get_template(template_id)
                 if not spec.vrm_path.is_file():
                     raise FileNotFoundError(f"Humanoid template VRM missing: {spec.vrm_path}")
@@ -422,7 +428,7 @@ class UniRigAdapter(AutoRigModel):
                 response_vrm = None
                 glb_candidate = None
             if rig_mode == "template":
-                rig_info["humanoid_template_id"] = humanoid_template_id or "template"
+                rig_info["humanoid_template_id"] = template_id
                 rig_info["validation"] = rig_validation
                 if wrap_requested:
                     rig_info["rig_mode"] = "template_wrap"
@@ -577,8 +583,11 @@ class UniRigAdapter(AutoRigModel):
                 },
                 "humanoid_template_id": {
                     "type": "string",
-                    "description": "Template id when rig_mode is template or template_wrap (default: template → template.vrm)",
-                    "default": "template",
+                    "description": (
+                        "Template id when rig_mode is template or template_wrap "
+                        "(default: humanoid; deprecated ids map to humanoid)"
+                    ),
+                    "default": "humanoid",
                     "required": False,
                 },
                 "seed": {
