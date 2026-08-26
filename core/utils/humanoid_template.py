@@ -1,12 +1,14 @@
 """
 Humanoid VRM template registry (master rig + blend shapes).
 
-Reference template: ``template.vrm`` — VRM 0.x humanoid with facial tracking blend shapes.
-Legacy id ``sifr2`` resolves to the same template for backward compatibility.
+Product template id: ``ict`` — ICT-FaceKit morph head + humanoid armature.
+Place ``assets/example_autorig/template_ict.vrm`` locally (not in the public tree)
+or set ``HUMANOID_TEMPLATE_VRM`` to the absolute path.
 """
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -16,6 +18,22 @@ from core.utils.vrm_inspection import VrmAnalysis, analyze_vrm
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "assets" / "example_autorig"
 REGRESSION_DIR = TEMPLATE_DIR / "regression"
+
+_DEPRECATED_TEMPLATE_IDS = frozenset({"template", "sifr2"})
+
+
+def _resolve_ict_vrm_path() -> Path:
+    env = (os.environ.get("HUMANOID_TEMPLATE_VRM") or "").strip()
+    if env:
+        return Path(env)
+    return TEMPLATE_DIR / "template_ict.vrm"
+
+
+def _resolve_ict_skeleton_fbx() -> Path:
+    env = (os.environ.get("HUMANOID_TEMPLATE_SKELETON_FBX") or "").strip()
+    if env:
+        return Path(env)
+    return TEMPLATE_DIR / "skeleton" / "template.fbx"
 
 
 @dataclass(frozen=True)
@@ -30,45 +48,55 @@ class HumanoidTemplateSpec:
     required_presets: tuple[str, ...] = ("blink", "neutral")
 
 
-_TEMPLATE_SPEC = HumanoidTemplateSpec(
-    template_id="template",
-    vrm_path=TEMPLATE_DIR / "template.vrm",
-    skeleton_fbx_path=TEMPLATE_DIR / "skeleton" / "template.fbx",
-    min_morph_targets=100,
-    min_blend_shape_groups=100,
-    min_skin_joints=60,
-    min_human_bones=50,
-    required_presets=("blink", "blink_l", "blink_r", "neutral"),
-)
-
-TEMPLATES: dict[str, HumanoidTemplateSpec] = {
-    "template": _TEMPLATE_SPEC,
-    "sifr2": _TEMPLATE_SPEC,  # deprecated alias
-}
+def _ict_spec() -> HumanoidTemplateSpec:
+    return HumanoidTemplateSpec(
+        template_id="ict",
+        vrm_path=_resolve_ict_vrm_path(),
+        skeleton_fbx_path=_resolve_ict_skeleton_fbx(),
+        min_morph_targets=50,
+        min_blend_shape_groups=40,
+        min_skin_joints=40,
+        min_human_bones=40,
+        required_presets=("blink", "blink_l", "blink_r", "neutral"),
+    )
 
 
-def get_template(template_id: str) -> HumanoidTemplateSpec:
-    key = template_id.lower().strip()
-    if key not in TEMPLATES:
+def normalize_humanoid_template_id(template_id: str | None) -> str:
+    """Map deprecated ids to product default ``ict``."""
+    key = (template_id or "ict").lower().strip()
+    if key in _DEPRECATED_TEMPLATE_IDS:
+        return "ict"
+    return key or "ict"
+
+
+def get_template(template_id: str = "ict") -> HumanoidTemplateSpec:
+    key = normalize_humanoid_template_id(template_id)
+    if key != "ict":
         raise KeyError(
-            f"Unknown humanoid template '{template_id}'. "
-            f"Available: {sorted(set(TEMPLATES))}"
+            f"Unknown humanoid template '{template_id}'. Available: ['ict']"
         )
-    return TEMPLATES[key]
+    return _ict_spec()
 
 
-def template_paths_available(template_id: str = "template") -> bool:
-    spec = get_template(template_id)
-    return spec.vrm_path.is_file()
+def template_paths_available(template_id: str = "ict") -> bool:
+    return get_template(template_id).vrm_path.is_file()
 
 
-def skeleton_reference_available(template_id: str = "template") -> bool:
-    spec = get_template(template_id)
-    return spec.skeleton_fbx_path.is_file()
+def resolve_default_humanoid_template_id() -> str:
+    if template_paths_available("ict"):
+        return "ict"
+    raise FileNotFoundError(
+        "template_ict.vrm missing — place at assets/example_autorig/template_ict.vrm "
+        "or set HUMANOID_TEMPLATE_VRM"
+    )
+
+
+def skeleton_reference_available(template_id: str = "ict") -> bool:
+    return get_template(template_id).skeleton_fbx_path.is_file()
 
 
 def validate_humanoid_template(
-    template_id: str = "template",
+    template_id: str = "ict",
     analysis: Optional[VrmAnalysis] = None,
 ) -> list[str]:
     spec = get_template(template_id)
@@ -112,19 +140,18 @@ def validate_humanoid_template(
     return errors
 
 
-def assert_humanoid_template(template_id: str = "template") -> VrmAnalysis:
+def assert_humanoid_template(template_id: str = "ict") -> VrmAnalysis:
     errors = validate_humanoid_template(template_id)
     if errors:
         raise ValueError("Humanoid template validation failed:\n  - " + "\n  - ".join(errors))
     return analyze_vrm(get_template(template_id).vrm_path)
 
 
-def load_template_manifest(template_id: str = "template") -> dict:
+def load_template_manifest(template_id: str = "ict") -> dict:
+    key = normalize_humanoid_template_id(template_id)
     candidates = [
-        REGRESSION_DIR / f"{template_id}_template.json",
-        REGRESSION_DIR / "template.json",
-        REGRESSION_DIR / f"{template_id}.json",
-        REGRESSION_DIR / "sifr2_template.json",
+        REGRESSION_DIR / f"{key}_template.json",
+        REGRESSION_DIR / f"{key}.json",
     ]
     for path in candidates:
         if path.is_file():

@@ -102,6 +102,14 @@ This document is the source of truth. Re-check upstream licenses when upgrading 
 - Weights on HF tagged **Apache-2.0** (commercial-friendly).
 - Pipeline still depends on **Hunyuan3D-2.1** for coarse mesh → inherits Tencent **CONDITIONAL** rules.
 
+
+### ARKit deformation transfer / ICT morph head
+- **Code:** MIT ([vasiliskatr/deformation_transfer_ARkit_blendshapes](https://github.com/vasiliskatr/deformation_transfer_ARkit_blendshapes)) — OK to vendor locally.
+- **Target topology:** **ICT-FaceKit** MIT ([USC-ICT/ICT-FaceKit](https://github.com/USC-ICT/ICT-FaceKit)). **FLAME / Max Planck** blocked.
+- **Hard constraint:** upstream README used **Wrap3D** for NRICP — **do not** ship Wrap3D. Use **native NRICP** only.
+- **Product template:** operator-local `template_ict.vrm` (`humanoid_template_id=ict`). Not shipped in the public tree.
+
+
 ### NVIDIA Kimodo text-to-motion (`kimodo_text_to_motion`)
 
 **What we ship:** `Kimodo-SOMA-RP-v1.1` via `adapters/kimodo_adapter.py` (SOMA skeleton → `studio_motion.json` for uploaded VRM).

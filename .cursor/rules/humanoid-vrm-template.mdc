@@ -1,19 +1,19 @@
 ---
-description: Humanoid VRM template (sifr2) — protect blend shapes, template rig mode
+description: Humanoid VRM template (ict) — protect blend shapes, template rig mode
 globs: core/utils/humanoid_template*.py,core/utils/vrm_inspection.py,scripts/blender/*humanoid*,scripts/blender/vrm_*,adapters/unirig_adapter.py,tests/test_humanoid_template.py
 alwaysApply: false
 ---
 
-# Humanoid VRM template (`sifr2`)
+# Humanoid VRM template (`ict`)
 
-Master asset: `assets/example_autorig/sifr2.vrm` (VRM 0.x, facial tracking blend shapes).
+Product template id: **`ict`** (ICT-FaceKit morph head). Operator-local `template_ict.vrm` (not in the public tree).
 
 ## Rules
 
-1. **Never** run `sifr2.vrm` through UniRig skeleton prediction — strips expressions.
-2. Use `rig_mode: "template"` + `humanoid_template_id: "sifr2"` for new textured meshes.
-3. Template rig = **bones + skin on target mesh**; blend shapes stay on `sifr2.vrm` until same-topology merge exists.
-4. Bird regression (`bird_trellis_*`) is unrelated — do not conflate with humanoid work.
+1. **Never** run the morph-head VRM through UniRig skeleton prediction — strips expressions.
+2. Use `rig_mode: "template"` or `"template_wrap"` + `humanoid_template_id: "ict"`.
+3. Template wrap = keep morph head + stitch AIGC body; clothing stays on Appearance base.
+4. Deprecated ids `template` / `sifr2` normalize to `ict`.
 
 ## Verify
 

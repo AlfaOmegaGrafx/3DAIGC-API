@@ -24,7 +24,12 @@ from core.utils.format_utils import (
     merge_rigged_fbx_with_source_mesh,
     source_mesh_has_textures,
 )
-from core.utils.humanoid_template import get_template, template_paths_available
+from core.utils.humanoid_template import (
+    get_template,
+    normalize_humanoid_template_id,
+    resolve_default_humanoid_template_id,
+    template_paths_available,
+)
 from core.utils.mesh_utils import MeshProcessor
 
 logger = logging.getLogger(__name__)
@@ -189,7 +194,9 @@ class UniRigAdapter(AutoRigModel):
             output_dir.mkdir(parents=True, exist_ok=True)
 
             if rig_mode == "template":
-                template_id = humanoid_template_id or "template"
+                template_id = normalize_humanoid_template_id(
+                    humanoid_template_id or resolve_default_humanoid_template_id()
+                )
                 spec = get_template(template_id)
                 if not spec.vrm_path.is_file():
                     raise FileNotFoundError(f"Humanoid template VRM missing: {spec.vrm_path}")
@@ -277,7 +284,7 @@ class UniRigAdapter(AutoRigModel):
                 "rig_mode": rig_mode,
             }
             if rig_mode == "template":
-                rig_info["humanoid_template_id"] = humanoid_template_id or "template"
+                rig_info["humanoid_template_id"] = template_id
                 rig_info["validation"] = rig_validation
 
             response = {
@@ -400,8 +407,8 @@ class UniRigAdapter(AutoRigModel):
                 },
                 "humanoid_template_id": {
                     "type": "string",
-                    "description": "Template id when rig_mode is template (default: template → template.vrm)",
-                    "default": "template",
+                    "description": "Template id when rig_mode is template (default: ict; deprecated template/sifr2 map to ict)",
+                    "default": "ict",
                     "required": False,
                 },
                 "seed": {

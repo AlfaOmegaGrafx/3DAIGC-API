@@ -475,6 +475,7 @@ memory-bank/creature-rig-pipeline-plan.md
 adapters/creature_template_adapter.py
 adapters/appearance_component_adapter.py
 assets/creature_autorig/
+assets/moat/
 assets/example_image/fox_test.png
 core/utils/creature_template.py
 core/utils/appearance_slots.py
@@ -488,3 +489,5 @@ tests/test_creature_template_rig.py
 tests/test_appearance_component_slots.py
 memory-bank/blender-mcp-agent-only.md
 memory-bank/blender-mcp-iteration-map.md
+assets/example_autorig/template_ict.vrm
+assets/example_autorig/template_ict_headbody.glb

@@ -1,0 +1,19 @@
+{
+  "template_id": "ict",
+  "description": "ICT-FaceKit morph head + humanoid armature (operator-local)",
+  "vrm_path": "assets/example_autorig/template_ict.vrm",
+  "skeleton_fbx_path": "assets/example_autorig/skeleton/template.fbx",
+  "expected": {
+    "spec": "0.x",
+    "morph_target_count": 51,
+    "blend_shape_group_count": 40,
+    "human_bone_count": 40,
+    "skin_joint_count": 40,
+    "required_presets": [
+      "blink",
+      "blink_l",
+      "blink_r",
+      "neutral"
+    ]
+  }
+}

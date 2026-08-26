@@ -16,7 +16,7 @@ from api.routers.file_upload import resolve_file_id_async
 from core.file_store import FileStore
 from core.scheduler.job_queue import JobRequest
 from core.scheduler.multiprocess_scheduler import MultiprocessModelScheduler
-from core.utils.humanoid_template import (
+from core.utils.humanoid_template import normalize_humanoid_template_id, (
     get_template,
     load_template_manifest,
     template_paths_available,
@@ -204,7 +204,7 @@ async def generate_rig(
 @router.get("/humanoid-templates/{template_id}/manifest")
 async def get_humanoid_template_manifest(template_id: str):
     """
-    Return regression manifest + live VRM analysis for template.vrm.
+    Return regression manifest + live VRM analysis for ICT humanoid template.
     Used by OpenNexus3DStudio VRM export and expression planning.
     """
     try:
@@ -226,7 +226,7 @@ async def get_humanoid_template_manifest(template_id: str):
         "expected": manifest.get("expected", {}),
         "description": manifest.get(
             "description",
-            "Master humanoid VRM (template.vrm) with facial blend shapes",
+            "Master humanoid VRM (ICT humanoid template) with facial blend shapes",
         ),
         "blend_shapes_on_generated_mesh": False,
         "wrap_status": "bones_only",
