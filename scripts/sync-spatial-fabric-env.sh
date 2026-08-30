@@ -21,7 +21,7 @@ mv "${API_ENV}.tmp" "$API_ENV"
 
 cat >> "$API_ENV" <<EOF
 MSF_PUBLIC_BASE_URL=${PUBLIC_BASE}
-MSF_FABRIC_MSF_URL=${PUBLIC_BASE}/fabric/sample.msf
+MSF_FABRIC_MSF_URL=${PUBLIC_BASE}/fabric/sneeze.msf
 MSF_OBJECTS_DIR=/home/sifr/MSF_Map_Svc/dist/web/objects
 RP1_COMPANY_ID=${RP1_COMPANY_ID}
 EOF

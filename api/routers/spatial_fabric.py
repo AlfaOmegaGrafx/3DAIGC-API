@@ -5,6 +5,7 @@ Spatial fabric / RP1 publishing endpoints for OMB-compliant GLB assets.
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 from typing import Any, Dict, Optional
 
@@ -211,5 +212,58 @@ async def publish_glb_upload(
         "omb": tier,
         "fabric_msf_url": cfg["fabric_msf_url"] or None,
         "scene_assembler_url": f"{cfg['public_base_url']}/",
+    }
+
+
+class OpenSpaceTimeBrowserRequest(BaseModel):
+    fabric_url: Optional[str] = Field(None, description="MSF fabric URL to open")
+    deep_link: Optional[str] = Field(None, description="spacetime:// deep link (optional)")
+
+
+@router.post("/open-space-time-browser", summary="Launch Space-Time Browser on DGX")
+async def open_space_time_browser(body: OpenSpaceTimeBrowserRequest):
+    """Phase B: spawn native spacetime-host against the published fabric."""
+    cfg = _spatial_config()
+    fabric_url = (body.fabric_url or cfg.get("fabric_msf_url") or "").strip()
+    if not fabric_url:
+        raise HTTPException(
+            status_code=503,
+            detail="fabric_url required (or set MSF_FABRIC_MSF_URL on API server)",
+        )
+
+    launch_script = os.environ.get(
+        "SPACETIME_HOST_LAUNCH_SCRIPT",
+        "/home/sifr/SpaceTimeHost/scripts/run-dgx.sh",
+    )
+    if not os.path.isfile(launch_script):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Launch script missing: {launch_script}",
+        )
+
+    env = os.environ.copy()
+    env.setdefault("DISPLAY", ":0")
+    env.setdefault("SNEEZE_SSL_INSECURE", "1")
+
+    cmd = ["bash", launch_script, "--url", fabric_url]
+    if body.deep_link and body.deep_link.startswith("spacetime://"):
+        cmd = ["bash", launch_script, body.deep_link]
+
+    try:
+        subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to launch Space-Time Browser: {exc}") from exc
+
+    return {
+        "launched": True,
+        "fabric_url": fabric_url,
+        "deep_link": body.deep_link or None,
+        "command": " ".join(cmd),
     }
 
