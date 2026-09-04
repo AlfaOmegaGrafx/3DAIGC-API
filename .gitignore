@@ -472,6 +472,11 @@ uploads/
 # Moat / internal strategy (never commit)
 # Entire memory-bank is local-only (align with OpenNexus) — never commit/push
 memory-bank/
+# MindLink + SessionMem team dumps — local only (may hold moat / ops secrets)
+.brain/
+.sessionmem-team/
+# Cursor project MCP may embed API keys — never commit
+.cursor/mcp.json
 # Full wrap roadmap (repo root only). Public stub stays tracked at docs/MESH_WRAP_ROADMAP.md
 /MESH_WRAP_ROADMAP.md
 # Moat — creature / appearance auto-rig (local only; never commit/push)
