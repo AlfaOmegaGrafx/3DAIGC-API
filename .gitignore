@@ -499,3 +499,6 @@ assets/example_autorig/humanoid_template.vrm
 assets/example_autorig/humanoid_template_headbody.glb
 assets/example_autorig/template_ict.vrm
 assets/example_autorig/template_ict_headbody.glb
+
+# Cursor MCP config may embed keys — never commit
+.mcp.json
